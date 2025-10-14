@@ -108,3 +108,15 @@ pm start or Docker) and open http://localhost:3000/ to test the form.
 - [ ] Validate that debug timeline captures enough detail for future triage; adjust events if gaps appear.
 - [ ] Exercise the photo orientation logic with mixed portrait/landscape sources; verify captions and rotation match expectations.
 
+## 12. Communication & Deployment Notes
+- **Preferred communication language:** Russian. Keep commit messages and documentation in English unless a Russian summary is explicitly requested.
+- **Source repository:** https://github.com/Vikinges/PDF_generator.git (`main` branch is the default deployment branch).
+- **Local deployment:**
+  1. `npm install`
+  2. `npm run extract-fields` (optional—only if the template PDF changed)
+  3. `npm start`
+  4. Open http://localhost:3000/ in a browser.
+- **Environment expectations:** Node.js 20+, npm 10+. The server binds to `PORT` (defaults to 3000) and respects `HOST_URL`/`TEMPLATE_PATH` from `.env`.
+- **Publishing updates:** run `npm test` ( to be implemented ), `git commit`, then `git push` to `origin/main`. GitHub Actions are not configured yet; manual deployment is required.
+- **Artifacts:** generated PDFs/JSON land in `out/`; ensure the directory is writable in the target environment.
+
