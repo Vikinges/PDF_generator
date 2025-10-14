@@ -664,7 +664,7 @@ function clearOriginalSignoffSection(pdfDoc) {
     x: 0,
     y: 0,
     width: templatePage.getWidth(),
-    height: 320,
+    height: templatePage.getHeight(),
     color: rgb(1, 1, 1),
     borderWidth: 0,
   });
@@ -1941,6 +1941,14 @@ ${renderChecklistSection('Sign off checklist', [
               urls.push(url);
               img.src = url;
               img.alt = file.name;
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                const reader = new FileReader();
+                reader.onload = () => {
+                  img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+              };
               const caption = document.createElement('span');
               caption.textContent = file.name + ' (' + formatBytes(file.size || 0) + ')';
               item.appendChild(img);
@@ -1957,6 +1965,14 @@ ${renderChecklistSection('Sign off checklist', [
             urls.push(url);
             img.src = url;
             img.alt = file.name;
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              const reader = new FileReader();
+              reader.onload = () => {
+                img.src = reader.result;
+              };
+              reader.readAsDataURL(file);
+            };
             const caption = document.createElement('span');
             caption.textContent = file.name + ' (' + formatBytes(file.size || 0) + ')';
             item.appendChild(img);
@@ -2511,23 +2527,27 @@ async function embedUploadedImages(pdfDoc, form, photoFiles) {
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   for (const { file, image } of embeddings) {
-    const page = pdfDoc.addPage([baseSize.width, baseSize.height]);
     const fieldName = file.fieldname || 'photos';
     const labelBase = labelByField[fieldName] || 'Photo';
     const currentIndex = (counters.get(fieldName) || 0) + 1;
     counters.set(fieldName, currentIndex);
-    const caption =
-      labelBase + (currentIndex > 1 ? ` #${currentIndex}` : '');
+    const caption = labelBase + (currentIndex > 1 ? ` #${currentIndex}` : '');
 
-    const availableWidth = baseSize.width - margin * 2;
-    const availableHeight = baseSize.height - margin * 2 - captionHeight;
+    const isLandscape = image.width >= image.height;
+    const pageSize = isLandscape
+      ? [baseSize.height, baseSize.width]
+      : [baseSize.width, baseSize.height];
+    const page = pdfDoc.addPage(pageSize);
+
+    const availableWidth = page.getWidth() - margin * 2;
+    const availableHeight = page.getHeight() - margin * 2 - captionHeight;
     const scale = Math.min(
       availableWidth / image.width,
       availableHeight / image.height,
     );
     const drawWidth = image.width * scale;
     const drawHeight = image.height * scale;
-    const x = (baseSize.width - drawWidth) / 2;
+    const x = (page.getWidth() - drawWidth) / 2;
     const y = margin + (availableHeight - drawHeight) / 2;
 
     page.drawImage(image, {
@@ -2539,7 +2559,7 @@ async function embedUploadedImages(pdfDoc, form, photoFiles) {
 
     page.drawText(caption, {
       x: margin,
-      y: baseSize.height - margin - captionHeight + 10,
+      y: page.getHeight() - margin - captionHeight + 10,
       size: 12,
       font: boldFont,
       color: rgb(0.12, 0.12, 0.18),
@@ -2698,7 +2718,11 @@ app.post('/submit', (req, res, next) => {
                   // ignore
                 }
               }
-              textField.setText(layout.fieldText);
+              const displayText =
+                layout.fieldText && layout.fieldText.trim().length
+                  ? layout.fieldText
+                  : normalizedValue;
+              textField.setText(displayText || '');
               try {
                 textField.updateAppearances(helveticaFont, {
                   fontSize: layout.appliedFontSize || style.fontSize,
@@ -2713,7 +2737,7 @@ app.post('/submit', (req, res, next) => {
                 // ignore
               }
             }
-            if (layout.overflowDetected) {
+            if (layout.overflowDetected && layout.overflowText && layout.overflowText.trim().length) {
               overflowTextEntries.push({
                 acroName: descriptor.acroName,
                 requestName: descriptor.requestName,
@@ -2750,14 +2774,13 @@ app.post('/submit', (req, res, next) => {
     hiddenPartRows = partsRowUsage.filter((row) => !row.hasData).map((row) => row.number);
     partsRowsRendered = partsRowUsage.filter((row) => row.hasData).map((row) => row.number);
 
-    const summaryPageInfo = clearOriginalSignoffSection(pdfDoc);
+    clearOriginalSignoffSection(pdfDoc);
     const signaturePlacements = await drawSignOffPage(
       pdfDoc,
       helveticaFont,
       sanitizedBody,
       signatureImages,
       partsRowUsage,
-      { targetPage: summaryPageInfo && summaryPageInfo.page },
     );
 
     const pages = pdfDoc.getPages();

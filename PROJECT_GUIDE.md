@@ -96,11 +96,15 @@ pm start or Docker) and open http://localhost:3000/ to test the form.
 - Restored rich photo handling: `photo_before`, `photo_after`, `photos` now accept up to 20 images each, render thumbnails/previews, and expose a cumulative upload summary.
 - Added submission UX: real-time progress bar via XHR, cursor feedback, and a persistent debug toggle (timeline written to the panel and preserved in localStorage).
 - Migrated checklist notes to auto-growing textareas (front-end auto-resize + dynamic font sizing inside the PDF) so long text no longer disappears.
-- Rebuilt the PDF pipeline: resized text fields with overflow capture, appended “Extended Text” pages when needed, redrew the parts table, and generated a clean maintenance summary/sign-off page (original template block is cleared).
+- Rebuilt the PDF pipeline: resized text fields with overflow capture, appended "Extended Text" pages when needed, redrew the parts table, and generated a clean maintenance summary/sign-off page (original template block is cleared).
 - Image metadata now records the source form field, label, and placement page; JSON metadata captures overflow text, hidden parts rows, and signature placements.
+- Auto-rotated photo pages: each uploaded image now claims its own portrait/landscape PDF page with captioned orientation.
+- Parts table on the form starts with a single editable row and grows via +/− controls (max 15, matching PDF consumption).
+- Front-end previews fall back to FileReader data URLs when object URLs fail, covering stricter browsers / Windows edge cases.
 
 ### Follow-up Checklist
 - [ ] Run end-to-end submission with large sample data to confirm overflow pages and maintenance summary match expected branding.
 - [ ] Add regression tests for `layoutTextForField` and the sign-off renderer.
 - [ ] Validate that debug timeline captures enough detail for future triage; adjust events if gaps appear.
+- [ ] Exercise the photo orientation logic with mixed portrait/landscape sources; verify captions and rotation match expectations.
 

@@ -151,13 +151,46 @@
         background: #eef1fb;
         font-size: 0.9rem;
       }
-      .parts-table td input {
+      .parts-table td input,
+      .parts-table td textarea {
         width: 100%;
         box-sizing: border-box;
         padding: 0.5rem;
         border-radius: 8px;
         border: 1px solid #d8d8e5;
         background: #fafafe;
+      }
+      .parts-table td textarea {
+        resize: vertical;
+        min-height: 2.75rem;
+        font: inherit;
+      }
+      .parts-table .is-hidden-row {
+        display: none;
+      }
+      .parts-table-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .parts-table-actions .button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        border-radius: 999px;
+        padding: 0.65rem 1.2rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .parts-table-actions .button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .parts-table-hint {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #6b7280;
       }
       .photos-card {
         display: grid;
@@ -594,7 +627,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         </section>
       <section class="card">
         <h2>Parts record</h2>
-        <table class="parts-table">
+        <table class="parts-table" data-parts-table>
           <thead>
             <tr>
               <th>Part removed (description)</th>
@@ -605,50 +638,118 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             </tr>
           </thead>
           <tbody>
-            <tr>
+            <tr class="parts-row" data-row-index="1">
               <td><input type="text" name="parts_removed_desc_1" value="Pixel card cabinet B2" /></td>
               <td><input type="text" name="parts_removed_part_1" value="FE038-PCARD" /></td>
               <td><input type="text" name="parts_removed_serial_1" value="SN-34782" /></td>
               <td><input type="text" name="parts_used_part_1" value="FE038-PCARD" /></td>
               <td><input type="text" name="parts_used_serial_1" value="SN-99012" /></td>
             </tr>
-            <tr>
+            <tr class="parts-row is-hidden-row" data-row-index="2">
               <td><input type="text" name="parts_removed_desc_2" /></td>
               <td><input type="text" name="parts_removed_part_2" /></td>
               <td><input type="text" name="parts_removed_serial_2" /></td>
               <td><input type="text" name="parts_used_part_2" /></td>
               <td><input type="text" name="parts_used_serial_2" /></td>
             </tr>
-            <tr>
+            <tr class="parts-row is-hidden-row" data-row-index="3">
               <td><input type="text" name="parts_removed_desc_3" /></td>
               <td><input type="text" name="parts_removed_part_3" /></td>
               <td><input type="text" name="parts_removed_serial_3" /></td>
               <td><input type="text" name="parts_used_part_3" /></td>
               <td><input type="text" name="parts_used_serial_3" /></td>
             </tr>
-            <tr>
+            <tr class="parts-row is-hidden-row" data-row-index="4">
               <td><input type="text" name="parts_removed_desc_4" /></td>
               <td><input type="text" name="parts_removed_part_4" /></td>
               <td><input type="text" name="parts_removed_serial_4" /></td>
               <td><input type="text" name="parts_used_part_4" /></td>
               <td><input type="text" name="parts_used_serial_4" /></td>
             </tr>
-            <tr>
+            <tr class="parts-row is-hidden-row" data-row-index="5">
               <td><input type="text" name="parts_removed_desc_5" /></td>
               <td><input type="text" name="parts_removed_part_5" /></td>
               <td><input type="text" name="parts_removed_serial_5" /></td>
               <td><input type="text" name="parts_used_part_5" /></td>
               <td><input type="text" name="parts_used_serial_5" /></td>
             </tr>
-            <tr>
+            <tr class="parts-row is-hidden-row" data-row-index="6">
               <td><input type="text" name="parts_removed_desc_6" /></td>
               <td><input type="text" name="parts_removed_part_6" /></td>
               <td><input type="text" name="parts_removed_serial_6" /></td>
               <td><input type="text" name="parts_used_part_6" /></td>
               <td><input type="text" name="parts_used_serial_6" /></td>
             </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="7">
+              <td><input type="text" name="parts_removed_desc_7" /></td>
+              <td><input type="text" name="parts_removed_part_7" /></td>
+              <td><input type="text" name="parts_removed_serial_7" /></td>
+              <td><input type="text" name="parts_used_part_7" /></td>
+              <td><input type="text" name="parts_used_serial_7" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="8">
+              <td><input type="text" name="parts_removed_desc_8" /></td>
+              <td><input type="text" name="parts_removed_part_8" /></td>
+              <td><input type="text" name="parts_removed_serial_8" /></td>
+              <td><input type="text" name="parts_used_part_8" /></td>
+              <td><input type="text" name="parts_used_serial_8" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="9">
+              <td><input type="text" name="parts_removed_desc_9" /></td>
+              <td><input type="text" name="parts_removed_part_9" /></td>
+              <td><input type="text" name="parts_removed_serial_9" /></td>
+              <td><input type="text" name="parts_used_part_9" /></td>
+              <td><input type="text" name="parts_used_serial_9" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="10">
+              <td><input type="text" name="parts_removed_desc_10" /></td>
+              <td><input type="text" name="parts_removed_part_10" /></td>
+              <td><input type="text" name="parts_removed_serial_10" /></td>
+              <td><input type="text" name="parts_used_part_10" /></td>
+              <td><input type="text" name="parts_used_serial_10" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="11">
+              <td><input type="text" name="parts_removed_desc_11" /></td>
+              <td><input type="text" name="parts_removed_part_11" /></td>
+              <td><input type="text" name="parts_removed_serial_11" /></td>
+              <td><input type="text" name="parts_used_part_11" /></td>
+              <td><input type="text" name="parts_used_serial_11" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="12">
+              <td><input type="text" name="parts_removed_desc_12" /></td>
+              <td><input type="text" name="parts_removed_part_12" /></td>
+              <td><input type="text" name="parts_removed_serial_12" /></td>
+              <td><input type="text" name="parts_used_part_12" /></td>
+              <td><input type="text" name="parts_used_serial_12" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="13">
+              <td><input type="text" name="parts_removed_desc_13" /></td>
+              <td><input type="text" name="parts_removed_part_13" /></td>
+              <td><input type="text" name="parts_removed_serial_13" /></td>
+              <td><input type="text" name="parts_used_part_13" /></td>
+              <td><input type="text" name="parts_used_serial_13" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="14">
+              <td><input type="text" name="parts_removed_desc_14" /></td>
+              <td><input type="text" name="parts_removed_part_14" /></td>
+              <td><input type="text" name="parts_removed_serial_14" /></td>
+              <td><input type="text" name="parts_used_part_14" /></td>
+              <td><input type="text" name="parts_used_serial_14" /></td>
+            </tr>
+            <tr class="parts-row is-hidden-row" data-row-index="15">
+              <td><input type="text" name="parts_removed_desc_15" /></td>
+              <td><input type="text" name="parts_removed_part_15" /></td>
+              <td><input type="text" name="parts_removed_serial_15" /></td>
+              <td><input type="text" name="parts_used_part_15" /></td>
+              <td><input type="text" name="parts_used_serial_15" /></td>
+            </tr>
           </tbody>
         </table>
+        <div class="parts-table-actions">
+          <button type="button" class="button" data-action="parts-add-row">+ Add another part</button>
+          <button type="button" class="button" data-action="parts-remove-row">- Remove last row</button>
+          <p class="parts-table-hint">Maximum of 15 rows.</p>
+        </div>
       </section>
       <section class="card">
         <h2>Sign off checklist</h2>
@@ -918,6 +1019,14 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
               urls.push(url);
               img.src = url;
               img.alt = file.name;
+              img.onerror = () => {
+                URL.revokeObjectURL(url);
+                const reader = new FileReader();
+                reader.onload = () => {
+                  img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+              };
               const caption = document.createElement('span');
               caption.textContent = file.name + ' (' + formatBytes(file.size || 0) + ')';
               item.appendChild(img);
@@ -934,6 +1043,14 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             urls.push(url);
             img.src = url;
             img.alt = file.name;
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              const reader = new FileReader();
+              reader.onload = () => {
+                img.src = reader.result;
+              };
+              reader.readAsDataURL(file);
+            };
             const caption = document.createElement('span');
             caption.textContent = file.name + ' (' + formatBytes(file.size || 0) + ')';
             item.appendChild(img);
@@ -954,6 +1071,77 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             totalBytes: files.reduce((sum, file) => sum + (file.size || 0), 0),
             names: files.map((file) => file.name),
           });
+        }
+
+        function setupPartsTable() {
+          const table = document.querySelector('[data-parts-table]');
+          if (!table) return;
+          const rows = Array.from(table.querySelectorAll('.parts-row'));
+          const addButton = document.querySelector('[data-action="parts-add-row"]');
+          const removeButton = document.querySelector('[data-action="parts-remove-row"]');
+          const hiddenClass = 'is-hidden-row';
+
+          const enableRow = (row) => {
+            row.classList.remove(hiddenClass);
+            row.querySelectorAll('input, textarea').forEach((input) => {
+              input.disabled = false;
+            });
+          };
+
+          const disableRow = (row, clear = false) => {
+            row.classList.add(hiddenClass);
+            row.querySelectorAll('input, textarea').forEach((input) => {
+              if (clear) input.value = '';
+              input.disabled = true;
+            });
+          };
+
+          const refresh = () => {
+            const visibleRows = rows.filter((row) => !row.classList.contains(hiddenClass));
+            if (addButton) {
+              addButton.disabled = visibleRows.length >= rows.length;
+            }
+            if (removeButton) {
+              removeButton.disabled = visibleRows.length <= 1;
+            }
+          };
+
+          rows.forEach((row, index) => {
+            if (index === 0) {
+              enableRow(row);
+            } else if (
+              Array.from(row.querySelectorAll('input, textarea')).some((input) => input.value.trim().length)
+            ) {
+              enableRow(row);
+            } else {
+              disableRow(row, true);
+            }
+          });
+
+          refresh();
+
+          if (addButton) {
+            addButton.addEventListener('click', (event) => {
+              event.preventDefault();
+              const nextHidden = rows.find((row) => row.classList.contains(hiddenClass));
+              if (!nextHidden) return;
+              enableRow(nextHidden);
+              const firstInput = nextHidden.querySelector('input, textarea');
+              if (firstInput) firstInput.focus();
+              refresh();
+            });
+          }
+
+          if (removeButton) {
+            removeButton.addEventListener('click', (event) => {
+              event.preventDefault();
+              const visibleRows = rows.filter((row) => !row.classList.contains(hiddenClass));
+              if (visibleRows.length <= 1) return;
+              const lastVisible = visibleRows[visibleRows.length - 1];
+              disableRow(lastVisible, true);
+              refresh();
+            });
+          }
         }
 
         function setupPhotoUploads() {
@@ -1145,6 +1333,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         }
 
         setupAutoResizeTextareas();
+        setupPartsTable();
         setupPhotoUploads();
         setupSignaturePads();
         updateFilesSummary();
