@@ -129,6 +129,15 @@ const SUGGESTION_FIELDS = new Set([
 const MIN_SUGGESTION_LENGTH = 3;
 const MAX_SUGGESTIONS_PER_FIELD = 12;
 
+function getSeedSuggestions(fieldName) {
+  if (!fieldName || !suggestionStore || !suggestionStore.suggestions) {
+    return [];
+  }
+  const bucket = suggestionStore.suggestions[fieldName];
+  if (!Array.isArray(bucket)) return [];
+  return bucket.slice(0, MAX_SUGGESTIONS_PER_FIELD);
+}
+
 const CHECKLIST_SECTIONS = [
   {
     title: 'LED display checks',
