@@ -18,6 +18,8 @@ const FIELDS_PATH = path.join(ROOT_DIR, 'fields.json');
 const MAPPING_PATH = path.join(ROOT_DIR, 'mapping.json');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const OUTPUT_DIR = path.join(ROOT_DIR, 'out');
+const DATA_DIR = path.join(ROOT_DIR, 'data');
+const SUGGESTION_STORE_PATH = path.join(DATA_DIR, 'store.json');
 const DEFAULT_TEMPLATE = '/mnt/data/SNDS-LED-Preventative-Maintenance-Checklist BER Blanko.pdf';
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
@@ -26,6 +28,7 @@ const TEMPLATE_PATH_ENV = process.env.TEMPLATE_PATH;
 
 fsExtra.ensureDirSync(PUBLIC_DIR);
 fsExtra.ensureDirSync(OUTPUT_DIR);
+fsExtra.ensureDirSync(DATA_DIR);
 
 /**
  * Load a JSON file from disk, returning a fallback value on failure.
@@ -113,6 +116,156 @@ const TEXT_FIELD_STYLE_RULES = [
   { test: /general_notes/i, style: { multiline: true, minFontSize: 6 } },
   { test: /(?:^|_)desc(?:_|$)/i, style: { multiline: true, minFontSize: 6 } },
 ];
+
+const SUGGESTION_FIELDS = new Set([
+  'end_customer_name',
+  'site_location',
+  'service_company_name',
+  'engineer_company',
+  'engineer_name',
+  'customer_company',
+  'customer_name',
+]);
+const MIN_SUGGESTION_LENGTH = 3;
+const MAX_SUGGESTIONS_PER_FIELD = 12;
+
+const CHECKLIST_SECTIONS = [
+  {
+    title: 'LED display checks',
+    rows: [
+      { action: 'Check for any visible issues. Resolve as necessary.', checkbox: 'led_complete_1', notes: 'led_notes_1', checked: true },
+      { action: 'Apply test pattern on full red, green, blue and white. Identify faults.', checkbox: 'led_complete_2', notes: 'led_notes_2', checked: true },
+      { action: 'Replace any pixel cards with dead or non-functioning pixels.', checkbox: 'led_complete_3', notes: 'led_notes_3', checked: true },
+      { action: 'Check power and data cables between cabinets for secure connections.', checkbox: 'led_complete_4', notes: 'led_notes_4' },
+      { action: 'Inspect for damage and replace any damaged or broken cables.', checkbox: 'led_complete_5', notes: 'led_notes_5' },
+      { action: 'Check monitoring feature for issues. Resolve as necessary.', checkbox: 'led_complete_6', notes: 'led_notes_6' },
+      { action: 'Check brightness levels in configurator and note levels down.', checkbox: 'led_complete_7', notes: 'led_notes_7' },
+    ],
+  },
+  {
+    title: 'Control equipment',
+    rows: [
+      { action: 'Check controllers are connected and cables seated correctly.', checkbox: 'control_complete_1', notes: 'control_notes_1', checked: true },
+      { action: 'Check controller redundancy; resolve issues where necessary.', checkbox: 'control_complete_2', notes: 'control_notes_2' },
+      { action: 'Check brightness levels on controllers and note levels.', checkbox: 'control_complete_3', notes: 'control_notes_3', checked: true },
+      { action: 'Check fans on controllers are working.', checkbox: 'control_complete_4', notes: 'control_notes_4' },
+      { action: 'Carefully wipe clean controllers.', checkbox: 'control_complete_5', notes: 'control_notes_5' },
+    ],
+  },
+  {
+    title: 'Spare parts',
+    rows: [
+      { action: 'Replace pixel cards in display with spare cards (ensure zero failures).', checkbox: 'spares_complete_1', notes: 'spares_notes_1', checked: true },
+      { action: 'Complete inventory log of spare parts.', checkbox: 'spares_complete_2', notes: 'spares_notes_2' },
+    ],
+  },
+];
+
+const SIGN_OFF_CHECKLIST_ROWS = [
+  {
+    action: 'LED equipment maintained and preventative work completed.',
+    checkbox: 'signoff_complete_1',
+    notes: 'signoff_notes_1',
+    checked: true,
+  },
+  {
+    action: 'Outstanding actions noted for customer follow-up.',
+    checkbox: 'signoff_complete_2',
+    notes: 'signoff_notes_2',
+  },
+];
+
+function normalizeSuggestionValue(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).trim().replace(/\s+/g, ' ');
+}
+
+function loadSuggestionStore() {
+  const fallback = { suggestions: {} };
+  const loaded = loadJson(SUGGESTION_STORE_PATH, fallback) || fallback;
+  const normalized = { suggestions: {} };
+  if (loaded && typeof loaded === 'object' && loaded.suggestions) {
+    for (const [field, values] of Object.entries(loaded.suggestions)) {
+      if (!Array.isArray(values)) continue;
+      const filtered = values
+        .map((entry) => normalizeSuggestionValue(entry))
+        .filter((entry) => entry.length >= MIN_SUGGESTION_LENGTH);
+      if (filtered.length) {
+        normalized.suggestions[field] = filtered.slice(0, MAX_SUGGESTIONS_PER_FIELD);
+      }
+    }
+  }
+  return normalized;
+}
+
+let suggestionStore = loadSuggestionStore();
+
+function saveSuggestionStore(store = suggestionStore) {
+  try {
+    fsExtra.writeJsonSync(SUGGESTION_STORE_PATH, store, { spaces: 2 });
+  } catch (err) {
+    console.warn(`[server] Unable to persist suggestion store: ${err.message}`);
+  }
+}
+
+function recordSuggestionValue(fieldName, value) {
+  if (!fieldName || !SUGGESTION_FIELDS.has(fieldName)) {
+    return false;
+  }
+  const normalized = normalizeSuggestionValue(value);
+  if (normalized.length < MIN_SUGGESTION_LENGTH) {
+    return false;
+  }
+  if (!suggestionStore.suggestions[fieldName]) {
+    suggestionStore.suggestions[fieldName] = [];
+  }
+  const bucket = suggestionStore.suggestions[fieldName];
+  const lower = normalized.toLowerCase();
+  const existingIndex = bucket.findIndex((entry) => entry.toLowerCase() === lower);
+  if (existingIndex === 0) {
+    return false;
+  }
+  if (existingIndex > 0) {
+    bucket.splice(existingIndex, 1);
+  }
+  bucket.unshift(normalized);
+  if (bucket.length > MAX_SUGGESTIONS_PER_FIELD) {
+    bucket.length = MAX_SUGGESTIONS_PER_FIELD;
+  }
+  return true;
+}
+
+function recordSuggestionsFromSubmission(body) {
+  if (!body || typeof body !== 'object') {
+    return false;
+  }
+  let changed = false;
+  for (const fieldName of SUGGESTION_FIELDS) {
+    if (!(fieldName in body)) continue;
+    const value = toSingleValue(body[fieldName]);
+    if (recordSuggestionValue(fieldName, value)) {
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveSuggestionStore();
+  }
+  return changed;
+}
+
+function getSuggestionsForField(fieldName, query) {
+  if (!fieldName || !SUGGESTION_FIELDS.has(fieldName)) {
+    return [];
+  }
+  const prefix = normalizeSuggestionValue(query).toLowerCase();
+  if (prefix.length < MIN_SUGGESTION_LENGTH) {
+    return [];
+  }
+  const bucket = suggestionStore.suggestions[fieldName] || [];
+  return bucket
+    .filter((entry) => entry.toLowerCase().startsWith(prefix))
+    .slice(0, MAX_SUGGESTIONS_PER_FIELD);
+}
 
 const PARTS_ROW_COUNT = 15;
 const PARTS_FIELD_PREFIXES = [
@@ -489,24 +642,27 @@ function renderPartsTable(pdfDoc, rows, options = {}) {
       row.fields[`parts_used_serial_${row.number}`] || '',
     ];
 
-    const cellLayouts = cellValues.map((value, index) =>
-      layoutTextForWidth({
+    const cellLayouts = cellValues.map((value, index) => {
+      const layout = layoutTextForWidth({
         value,
         font,
         fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
         minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
         lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
         maxWidth: scaledWidths[index] - 8,
-      })
-    );
+      });
+      return { value, layout };
+    });
 
     const rowHeight = Math.max(
       rowHeightBase,
-      ...cellLayouts.map((layout) => layout.lineCount * layout.lineHeight + 8),
+      ...cellLayouts.map(({ layout }) =>
+        Math.ceil(layout.lineCount * layout.lineHeight + 8),
+      ),
     );
 
     let cellX = left;
-    cellLayouts.forEach((layout, index) => {
+    cellLayouts.forEach(({ value, layout }, index) => {
       const cellWidth = scaledWidths[index];
       page.drawRectangle({
         x: cellX,
@@ -518,17 +674,22 @@ function renderPartsTable(pdfDoc, rows, options = {}) {
         borderColor: TABLE_BORDER_COLOR,
       });
 
-      let textY = currentY - 6;
-      layout.lines.forEach((line) => {
-        page.drawText(line || ' ', {
-          x: cellX + 4,
-          y: textY,
-          size: layout.fontSize,
-          font,
+      drawCenteredTextBlock(
+        page,
+        value,
+        font,
+        { x: cellX, y: currentY - rowHeight, width: cellWidth, height: rowHeight },
+        {
+          align: 'left',
+          paddingX: 4,
+          paddingY: 6,
           color: rgb(0.12, 0.12, 0.18),
-        });
-        textY -= layout.lineHeight;
-      });
+          fontSize: layout.fontSize,
+          minFontSize: layout.fontSize,
+          lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+          layout,
+        },
+      );
 
       cellX += cellWidth;
     });
@@ -543,26 +704,56 @@ function renderPartsTable(pdfDoc, rows, options = {}) {
 function drawCenteredTextBlock(page, text, font, rect, options = {}) {
   if (!page || !font || !rect) return;
   const content = text === undefined || text === null ? '' : String(text).trim();
-  if (!content) return;
   const fontSize = options.fontSize || 10;
   const lineHeightMultiplier = options.lineHeightMultiplier || 1.2;
-  const paddingX = options.paddingX || 6;
+  const paddingX = options.paddingX !== undefined ? options.paddingX : 6;
+  const paddingY = options.paddingY !== undefined ? options.paddingY : 6;
+  const align = options.align || 'center';
+  const verticalAlign = options.verticalAlign || 'middle';
   const color = options.color || rgb(0.12, 0.12, 0.18);
 
-  const layout = layoutTextForWidth({
-    value: content,
-    font,
-    fontSize,
-    minFontSize: options.minFontSize || fontSize,
-    lineHeightMultiplier,
-    maxWidth: Math.max(4, rect.width - paddingX * 2),
-  });
+  const layout =
+    options.layout ||
+    layoutTextForWidth({
+      value: content,
+      font,
+      fontSize,
+      minFontSize: options.minFontSize || fontSize,
+      lineHeightMultiplier,
+      maxWidth: Math.max(4, rect.width - paddingX * 2),
+    });
+
+  if (!layout || !Array.isArray(layout.lines) || !layout.lines.length) {
+    if (options.drawPlaceholder) {
+      page.drawText(' ', {
+        x: rect.x + paddingX,
+        y: rect.y + rect.height / 2,
+        size: fontSize,
+        font,
+        color,
+      });
+    }
+    return layout;
+  }
 
   const totalHeight = layout.lineCount * layout.lineHeight;
-  let textY = rect.y + (rect.height - totalHeight) / 2 + layout.lineHeight - layout.fontSize;
+  let textY;
+  if (verticalAlign === 'top') {
+    textY = rect.y + rect.height - paddingY - layout.fontSize;
+  } else if (verticalAlign === 'bottom') {
+    textY = rect.y + paddingY;
+  } else {
+    textY = rect.y + (rect.height - totalHeight) / 2 + layout.lineHeight - layout.fontSize;
+  }
+
   layout.lines.forEach((line) => {
     const lineWidth = font.widthOfTextAtSize(line, layout.fontSize);
-    const textX = rect.x + (rect.width - lineWidth) / 2;
+    let textX = rect.x + paddingX;
+    if (align === 'center') {
+      textX = rect.x + (rect.width - lineWidth) / 2;
+    } else if (align === 'right') {
+      textX = rect.x + rect.width - paddingX - lineWidth;
+    }
     page.drawText(line, {
       x: textX,
       y: textY,
@@ -572,6 +763,8 @@ function drawCenteredTextBlock(page, text, font, rect, options = {}) {
     });
     textY -= layout.lineHeight;
   });
+
+  return layout;
 }
 
 function appendOverflowPages(pdfDoc, font, overflowEntries, options = {}) {
@@ -675,38 +868,63 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
   const pagesList = pdfDoc.getPages();
   const baseSize = pagesList.length ? pagesList[0].getSize() : { width: 595.28, height: 841.89 };
   const margin = 56;
-  let page = options.targetPage || null;
-  if (!page) {
-    page = pdfDoc.addPage([baseSize.width, baseSize.height]);
-  }
-  const pageIndex = pagesList.indexOf(page);
-  const pageNumber = pageIndex >= 0 ? pageIndex + 1 : pdfDoc.getPageCount();
+  const headingColor = rgb(0.08, 0.2, 0.4);
+  const textColor = rgb(0.12, 0.12, 0.18);
 
-  let cursorY = page.getHeight() - margin;
-  page.drawText('Maintenance Summary', {
-    x: margin,
-    y: cursorY,
-    size: 18,
-    font,
-    color: rgb(0.08, 0.2, 0.4),
-  });
-  cursorY -= 26;
+  const initialPage =
+    options.targetPage && pagesList.includes(options.targetPage)
+      ? options.targetPage
+      : pdfDoc.addPage([baseSize.width, baseSize.height]);
+  let page = initialPage;
+  let cursorY = 0;
 
-  const usedRows = (partsRows || []).filter((row) => row.hasData);
-  const tableWidth = page.getWidth() - margin * 2;
-  if (usedRows.length) {
-    const columnWidths = [0.32, 0.18, 0.18, 0.18, 0.14].map((ratio) => tableWidth * ratio);
-    page.drawText('Parts record', {
+  const setCurrentPage = (target, heading) => {
+    page = target;
+    cursorY = page.getHeight() - margin;
+    page.drawText(heading, {
+      x: margin,
+      y: cursorY,
+      size: 18,
+      font,
+      color: headingColor,
+    });
+    cursorY -= 26;
+  };
+
+  const addContinuationPage = () => {
+    const next = pdfDoc.addPage([baseSize.width, baseSize.height]);
+    setCurrentPage(next, 'Maintenance Summary (cont.)');
+    return next;
+  };
+
+  const ensureSpace = (requiredHeight) => {
+    if (cursorY - requiredHeight < margin) {
+      return addContinuationPage();
+    }
+    return null;
+  };
+
+  const drawSectionTitle = (label) => {
+    page.drawText(label, {
       x: margin,
       y: cursorY,
       size: 12,
       font,
-      color: rgb(0.08, 0.2, 0.4),
+      color: headingColor,
     });
     cursorY -= 18;
+  };
 
+  setCurrentPage(page, 'Maintenance Summary');
+
+  const tableWidth = page.getWidth() - margin * 2;
+  const signaturePlacements = [];
+
+  const usedRows = (partsRows || []).filter((row) => row.hasData);
+  if (usedRows.length) {
+    const columnWidths = [0.32, 0.18, 0.18, 0.18, 0.14].map((ratio) => tableWidth * ratio);
     const headerHeight = 18;
-    const rowHeight = 22;
+    const rowHeightBase = 22;
     const headers = [
       'Part removed (description)',
       'Part number',
@@ -715,44 +933,86 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
       'Serial number (used)',
     ];
 
-    let headerX = margin;
-    headers.forEach((label, index) => {
-      const width = columnWidths[index];
-      page.drawRectangle({
-        x: headerX,
-        y: cursorY - headerHeight,
-        width,
-        height: headerHeight,
-        color: rgb(0.88, 0.92, 0.98),
-        borderWidth: 0.6,
-        borderColor: TABLE_BORDER_COLOR,
+    const drawPartsHeader = () => {
+      let headerX = margin;
+      headers.forEach((label, index) => {
+        const width = columnWidths[index];
+        page.drawRectangle({
+          x: headerX,
+          y: cursorY - headerHeight,
+          width,
+          height: headerHeight,
+          color: rgb(0.88, 0.92, 0.98),
+          borderWidth: 0.6,
+          borderColor: TABLE_BORDER_COLOR,
+        });
+        const labelLayout = layoutTextForWidth({
+          value: label,
+          font,
+          fontSize: 9,
+          minFontSize: 8,
+          lineHeightMultiplier: 1.2,
+          maxWidth: width - 8,
+        });
+        let textY = cursorY - headerHeight + headerHeight - 6;
+        labelLayout.lines.forEach((line) => {
+          page.drawText(line, {
+            x: headerX + 4,
+            y: textY,
+            size: labelLayout.fontSize,
+            font,
+            color: rgb(0.1, 0.1, 0.3),
+          });
+          textY -= labelLayout.lineHeight;
+        });
+        headerX += width;
       });
-      page.drawText(label, {
-        x: headerX + 4,
-        y: cursorY - headerHeight + 5,
-        size: 9,
-        font,
-        color: rgb(0.1, 0.1, 0.3),
-      });
-      headerX += width;
-    });
-    cursorY -= headerHeight;
+      cursorY -= headerHeight;
+    };
+
+    const headerLabel =
+      ensureSpace(headerHeight + rowHeightBase * Math.min(usedRows.length, 3) + 12)
+        ? 'Parts record (cont.)'
+        : 'Parts record';
+    drawSectionTitle(headerLabel);
+    drawPartsHeader();
 
     usedRows.forEach((row) => {
-      const values = [
+      const cellValues = [
         row.fields[`parts_removed_desc_${row.number}`] || '',
         row.fields[`parts_removed_part_${row.number}`] || '',
         row.fields[`parts_removed_serial_${row.number}`] || '',
         row.fields[`parts_used_part_${row.number}`] || '',
         row.fields[`parts_used_serial_${row.number}`] || '',
       ];
+      const cellLayouts = cellValues.map((value, index) => {
+        const layout = layoutTextForWidth({
+          value,
+          font,
+          fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
+          minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
+          lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+          maxWidth: columnWidths[index] - 8,
+        });
+        return { value, layout };
+      });
+      const rowHeight = Math.max(
+        rowHeightBase,
+        ...cellLayouts.map(({ layout }) =>
+          Math.ceil(layout.lineCount * layout.lineHeight + 8),
+        ),
+      );
+      if (ensureSpace(rowHeight + 6)) {
+        drawSectionTitle('Parts record (cont.)');
+        drawPartsHeader();
+      }
       let cellX = margin;
-      values.forEach((value, index) => {
-        const width = columnWidths[index];
+      cellLayouts.forEach(({ value, layout }, index) => {
+        const cellWidth = columnWidths[index];
         page.drawRectangle({
           x: cellX,
           y: cursorY - rowHeight,
-          width,
+          width: cellWidth,
           height: rowHeight,
           color: rgb(1, 1, 1),
           borderWidth: 0.6,
@@ -762,132 +1022,202 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
           page,
           value,
           font,
+          { x: cellX, y: cursorY - rowHeight, width: cellWidth, height: rowHeight },
           {
-            x: cellX,
-            y: cursorY - rowHeight,
-            width,
-            height: rowHeight,
+            align: 'left',
+            paddingX: 4,
+            paddingY: 6,
+            color: textColor,
+            fontSize: layout.fontSize,
+            minFontSize: layout.fontSize,
+            lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+            layout,
           },
-          { fontSize: 9, color: rgb(0.12, 0.12, 0.18) },
         );
-        cellX += width;
+        cellX += cellWidth;
       });
       cursorY -= rowHeight;
     });
+
     cursorY -= 24;
   } else {
+    if (ensureSpace(24)) {
+      drawSectionTitle('Parts record (cont.)');
+    } else {
+      drawSectionTitle('Parts record');
+    }
     page.drawText('No spare parts were recorded for this visit.', {
       x: margin,
       y: cursorY,
       size: 11,
       font,
-      color: rgb(0.12, 0.12, 0.18),
+      color: textColor,
     });
     cursorY -= 24;
   }
 
-  page.drawText('Sign-off checklist', {
-    x: margin,
-    y: cursorY,
-    size: 12,
-    font,
-    color: rgb(0.08, 0.2, 0.4),
-  });
-  cursorY -= 18;
+  const drawChecklistSection = (section) => {
+    const columnWidths = [tableWidth * 0.55, tableWidth * 0.12, tableWidth * 0.33];
+    const headerHeight = 18;
+    const rowBaseHeight = 24;
+    const headers = ['Action', 'Complete', 'Notes'];
 
-  const signRows = [
-    {
-      label: 'LED equipment maintained and preventative work completed to satisfaction.',
-      complete: normalizeCheckboxValue(body?.signoff_complete_1),
-      notes: toSingleValue(body?.signoff_notes_1) || '',
-    },
-    {
-      label: 'Outstanding actions noted for follow-up by customer/service team.',
-      complete: normalizeCheckboxValue(body?.signoff_complete_2),
-      notes: toSingleValue(body?.signoff_notes_2) || '',
-    },
-  ];
-  const checklistWidths = [tableWidth * 0.55, tableWidth * 0.12, tableWidth * 0.33];
-  const checklistRowHeight = 24;
+    const drawHeaderRow = () => {
+      let headerX = margin;
+      headers.forEach((label, index) => {
+        const width = columnWidths[index];
+        page.drawRectangle({
+          x: headerX,
+          y: cursorY - headerHeight,
+          width,
+          height: headerHeight,
+          color: rgb(0.92, 0.95, 0.99),
+          borderWidth: 0.6,
+          borderColor: TABLE_BORDER_COLOR,
+        });
+        page.drawText(label, {
+          x: headerX + 4,
+          y: cursorY - headerHeight + headerHeight - 8,
+          size: 9,
+          font,
+          color: rgb(0.1, 0.1, 0.3),
+        });
+        headerX += width;
+      });
+      cursorY -= headerHeight;
+    };
 
-  signRows.forEach((row) => {
-    let cellX = margin;
-    page.drawRectangle({
-      x: cellX,
-      y: cursorY - checklistRowHeight,
-      width: checklistWidths[0],
-      height: checklistRowHeight,
-      borderWidth: 0.6,
-      borderColor: TABLE_BORDER_COLOR,
-      color: rgb(1, 1, 1),
-    });
-    drawCenteredTextBlock(
-      page,
-      row.label,
-      font,
-      {
+    const headingLabel =
+      ensureSpace(headerHeight + rowBaseHeight + 12) ? `${section.title} (cont.)` : section.title;
+    drawSectionTitle(headingLabel);
+    drawHeaderRow();
+
+    section.rows.forEach((row) => {
+      const actionLayout = layoutTextForWidth({
+        value: row.action,
+        font,
+        fontSize: 10,
+        minFontSize: 9,
+        lineHeightMultiplier: 1.2,
+        maxWidth: columnWidths[0] - 8,
+      });
+      const noteValue = toSingleValue(body?.[row.notes]) || '';
+      const noteLayout = layoutTextForWidth({
+        value: noteValue,
+        font,
+        fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
+        minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
+        lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+        maxWidth: columnWidths[2] - 8,
+      });
+      const rowHeight = Math.max(
+        rowBaseHeight,
+        Math.ceil(actionLayout.lineCount * actionLayout.lineHeight + 8),
+        Math.ceil(noteLayout.lineCount * noteLayout.lineHeight + 8),
+      );
+      if (ensureSpace(rowHeight + 8)) {
+        drawSectionTitle(`${section.title} (cont.)`);
+        drawHeaderRow();
+      }
+
+      let cellX = margin;
+      page.drawRectangle({
         x: cellX,
-        y: cursorY - checklistRowHeight,
-        width: checklistWidths[0],
-        height: checklistRowHeight,
-      },
-      { fontSize: 9, color: rgb(0.12, 0.12, 0.18) },
-    );
-    cellX += checklistWidths[0];
-
-    page.drawRectangle({
-      x: cellX,
-      y: cursorY - checklistRowHeight,
-      width: checklistWidths[1],
-      height: checklistRowHeight,
-      borderWidth: 0.6,
-      borderColor: TABLE_BORDER_COLOR,
-      color: rgb(1, 1, 1),
-    });
-    page.drawRectangle({
-      x: cellX + 6,
-      y: cursorY - checklistRowHeight + 6,
-      width: 12,
-      height: 12,
-      borderWidth: 0.8,
-      borderColor: TABLE_BORDER_COLOR,
-    });
-    if (row.complete) {
-      page.drawLine({
-        start: { x: cellX + 8, y: cursorY - checklistRowHeight + 11 },
-        end: { x: cellX + 12, y: cursorY - checklistRowHeight + 6 },
-        thickness: 1.2,
-        color: rgb(0.12, 0.12, 0.18),
+        y: cursorY - rowHeight,
+        width: columnWidths[0],
+        height: rowHeight,
+        color: rgb(1, 1, 1),
+        borderWidth: 0.6,
+        borderColor: TABLE_BORDER_COLOR,
       });
-      page.drawLine({
-        start: { x: cellX + 12, y: cursorY - checklistRowHeight + 6 },
-        end: { x: cellX + 18, y: cursorY - checklistRowHeight + 16 },
-        thickness: 1.2,
-        color: rgb(0.12, 0.12, 0.18),
+      drawCenteredTextBlock(
+        page,
+        row.action,
+        font,
+        { x: cellX, y: cursorY - rowHeight, width: columnWidths[0], height: rowHeight },
+        {
+          align: 'left',
+          paddingX: 4,
+          paddingY: 6,
+          color: textColor,
+          fontSize: actionLayout.fontSize,
+          minFontSize: actionLayout.fontSize,
+          lineHeightMultiplier: 1.2,
+          layout: actionLayout,
+        },
+      );
+      cellX += columnWidths[0];
+
+      page.drawRectangle({
+        x: cellX,
+        y: cursorY - rowHeight,
+        width: columnWidths[1],
+        height: rowHeight,
+        color: rgb(1, 1, 1),
+        borderWidth: 0.6,
+        borderColor: TABLE_BORDER_COLOR,
       });
-    }
-    cellX += checklistWidths[1];
+      const checkboxSize = 12;
+      const checkboxX = cellX + (columnWidths[1] - checkboxSize) / 2;
+      const checkboxY = cursorY - rowHeight + (rowHeight - checkboxSize) / 2;
+      page.drawRectangle({
+        x: checkboxX,
+        y: checkboxY,
+        width: checkboxSize,
+        height: checkboxSize,
+        borderWidth: 0.8,
+        borderColor: TABLE_BORDER_COLOR,
+      });
+      if (normalizeCheckboxValue(body?.[row.checkbox])) {
+        page.drawLine({
+          start: { x: checkboxX + 3, y: checkboxY + checkboxSize / 2 },
+          end: { x: checkboxX + checkboxSize / 2, y: checkboxY + 3 },
+          thickness: 1.2,
+          color: textColor,
+        });
+        page.drawLine({
+          start: { x: checkboxX + checkboxSize / 2, y: checkboxY + 3 },
+          end: { x: checkboxX + checkboxSize - 3, y: checkboxY + checkboxSize - 3 },
+          thickness: 1.2,
+          color: textColor,
+        });
+      }
+      cellX += columnWidths[1];
 
-    page.drawRectangle({
-      x: cellX,
-      y: cursorY - checklistRowHeight,
-      width: checklistWidths[2],
-      height: checklistRowHeight,
-      borderWidth: 0.6,
-      borderColor: TABLE_BORDER_COLOR,
-      color: rgb(1, 1, 1),
+      page.drawRectangle({
+        x: cellX,
+        y: cursorY - rowHeight,
+        width: columnWidths[2],
+        height: rowHeight,
+        color: rgb(1, 1, 1),
+        borderWidth: 0.6,
+        borderColor: TABLE_BORDER_COLOR,
+      });
+      drawCenteredTextBlock(
+        page,
+        noteValue,
+        font,
+        { x: cellX, y: cursorY - rowHeight, width: columnWidths[2], height: rowHeight },
+        {
+          align: 'left',
+          paddingX: 4,
+          paddingY: 6,
+          color: textColor,
+          fontSize: noteLayout.fontSize,
+          minFontSize: noteLayout.fontSize,
+          lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+          layout: noteLayout,
+        },
+      );
+
+      cursorY -= rowHeight;
     });
-    drawCenteredTextBlock(
-      page,
-      row.notes,
-      font,
-      { x: cellX, y: cursorY - checklistRowHeight, width: checklistWidths[2], height: checklistRowHeight },
-      { fontSize: 9, color: rgb(0.12, 0.12, 0.18) },
-    );
 
-    cursorY -= checklistRowHeight;
-  });
-  cursorY -= 24;
+    cursorY -= 18;
+  };
+
+  CHECKLIST_SECTIONS.forEach((section) => drawChecklistSection(section));
+  drawChecklistSection({ title: 'Sign-off checklist', rows: SIGN_OFF_CHECKLIST_ROWS });
 
   const engineerDetails = [
     { label: 'On-site engineer company', value: toSingleValue(body?.engineer_company) || '' },
@@ -899,11 +1229,20 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
     { label: 'Customer date & time', value: toSingleValue(body?.customer_datetime) || '' },
     { label: 'Customer name', value: toSingleValue(body?.customer_name) || '' },
   ];
-  const columnWidth = (page.getWidth() - margin * 2 - 16) / 2;
+  const detailRows = engineerDetails.length;
   const detailHeight = 28;
+  const detailHeading =
+    ensureSpace(detailHeight * detailRows + 40) ? 'Sign-off details (cont.)' : 'Sign-off details';
+  drawSectionTitle(detailHeading);
+  const columnWidth = (page.getWidth() - margin * 2 - 16) / 2;
+  const baseDetailY = cursorY;
   engineerDetails.forEach((detail, index) => {
-    const topY = cursorY - detailHeight * index;
-    const engineerRect = { x: margin, y: topY - detailHeight, width: columnWidth, height: detailHeight };
+    const engineerRect = {
+      x: margin,
+      y: baseDetailY - detailHeight * (index + 1),
+      width: columnWidth,
+      height: detailHeight,
+    };
     page.drawRectangle({
       x: engineerRect.x,
       y: engineerRect.y,
@@ -918,14 +1257,14 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
       y: engineerRect.y + engineerRect.height + 6,
       size: 9,
       font,
-      color: rgb(0.08, 0.2, 0.4),
+      color: headingColor,
     });
     drawCenteredTextBlock(page, detail.value, font, engineerRect, { fontSize: 10 });
 
     const customer = customerDetails[index];
     const customerRect = {
       x: margin + columnWidth + 16,
-      y: topY - detailHeight,
+      y: baseDetailY - detailHeight * (index + 1),
       width: columnWidth,
       height: detailHeight,
     };
@@ -943,29 +1282,34 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
       y: customerRect.y + customerRect.height + 6,
       size: 9,
       font,
-      color: rgb(0.08, 0.2, 0.4),
+      color: headingColor,
     });
     drawCenteredTextBlock(page, customer.value, font, customerRect, { fontSize: 10 });
   });
-  cursorY -= detailHeight * engineerDetails.length + 20;
+  cursorY -= detailHeight * detailRows + 20;
 
-  const signaturePlacements = [];
   const signatureHeight = 90;
+  const signatureHeading =
+    ensureSpace(signatureHeight + 60) ? 'Signatures (cont.)' : 'Signatures';
+  drawSectionTitle(signatureHeading);
   const signatureWidth = columnWidth;
   const signatureBoxes = [
     { label: 'Engineer signature', acroName: 'engineer_signature', x: margin },
     { label: 'Customer signature', acroName: 'customer_signature', x: margin + columnWidth + 16 },
   ];
+  const resolvePageNumber = () => pdfDoc.getPages().indexOf(page) + 1;
 
   for (const box of signatureBoxes) {
-    const entry = (signatureImages || []).find((item) => new RegExp(box.acroName, 'i').test(item.acroName));
+    const entry = (signatureImages || []).find((item) =>
+      new RegExp(box.acroName, 'i').test(item.acroName),
+    );
     const boxRect = { x: box.x, y: cursorY - signatureHeight, width: signatureWidth, height: signatureHeight };
     page.drawText(box.label, {
       x: boxRect.x,
       y: boxRect.y + boxRect.height + 6,
       size: 10,
       font,
-      color: rgb(0.08, 0.2, 0.4),
+      color: headingColor,
     });
     page.drawRectangle({
       x: boxRect.x,
@@ -1000,7 +1344,7 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
           });
           signaturePlacements.push({
             acroName: entry.acroName,
-            page: pageNumber,
+            page: resolvePageNumber(),
             width: Number(drawWidth.toFixed(2)),
             height: Number(drawHeight.toFixed(2)),
           });
@@ -1010,6 +1354,7 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
       }
     }
   }
+  cursorY -= signatureHeight + 30;
 
   return signaturePlacements;
 }
@@ -1102,9 +1447,18 @@ function generateIndexHtml() {
         </label>`;
     }
     const valueAttr = initial ? ` value="${escapeHtml(initial)}"` : '';
+    const enableSuggestions = SUGGESTION_FIELDS.has(descriptor.requestName);
+    let suggestionAttrs = '';
+    let datalistMarkup = '';
+    if (enableSuggestions) {
+      const listId = `suggest-${id}`;
+      suggestionAttrs =
+        ` data-suggest-field="${escapeHtml(descriptor.requestName)}" list="${escapeHtml(listId)}" autocomplete="off"`;
+      datalistMarkup = `\n          <datalist id="${escapeHtml(listId)}" data-suggest-list="${escapeHtml(descriptor.requestName)}"></datalist>`;
+    }
     return `        <label class="field" for="${id}">
           <span>${escapeHtml(label)}</span>
-          <input type="${escapeHtml(type)}" id="${id}" name="${escapeHtml(descriptor.requestName)}"${valueAttr} placeholder="${escapeHtml(placeholder || label)}" />
+          <input type="${escapeHtml(type)}" id="${id}" name="${escapeHtml(descriptor.requestName)}"${valueAttr} placeholder="${escapeHtml(placeholder || label)}"${suggestionAttrs} />${datalistMarkup}
         </label>`;
   };
 
@@ -1665,26 +2019,7 @@ ${renderTextInput('date_of_service', 'Date of service', { type: 'date' })}
 ${renderTextInput('service_company_name', 'Service company name')}
           </div>
         </section>
-${renderChecklistSection('LED display checks', [
-  { action: 'Check for any visible issues. Resolve as necessary.', checkbox: 'led_complete_1', notes: 'led_notes_1', checked: true },
-  { action: 'Apply test pattern on full red, green, blue and white. Identify faults.', checkbox: 'led_complete_2', notes: 'led_notes_2', checked: true },
-  { action: 'Replace any pixel cards with dead or non-functioning pixels.', checkbox: 'led_complete_3', notes: 'led_notes_3', checked: true },
-  { action: 'Check power and data cables between cabinets for secure connections.', checkbox: 'led_complete_4', notes: 'led_notes_4' },
-  { action: 'Inspect for damage and replace any damaged or broken cables.', checkbox: 'led_complete_5', notes: 'led_notes_5' },
-  { action: 'Check monitoring feature for issues. Resolve as necessary.', checkbox: 'led_complete_6', notes: 'led_notes_6' },
-  { action: 'Check brightness levels in configurator and note levels down.', checkbox: 'led_complete_7', notes: 'led_notes_7' },
-])}
-${renderChecklistSection('Control equipment', [
-  { action: 'Check controllers are connected and cables seated correctly.', checkbox: 'control_complete_1', notes: 'control_notes_1', checked: true },
-  { action: 'Check controller redundancy; resolve issues where necessary.', checkbox: 'control_complete_2', notes: 'control_notes_2' },
-  { action: 'Check brightness levels on controllers and note levels.', checkbox: 'control_complete_3', notes: 'control_notes_3', checked: true },
-  { action: 'Check fans on controllers are working.', checkbox: 'control_complete_4', notes: 'control_notes_4' },
-  { action: 'Carefully wipe clean controllers.', checkbox: 'control_complete_5', notes: 'control_notes_5' },
-])}
-${renderChecklistSection('Spare parts', [
-  { action: 'Replace pixel cards in display with spare cards (ensure zero failures).', checkbox: 'spares_complete_1', notes: 'spares_notes_1', checked: true },
-  { action: 'Complete inventory log of spare parts.', checkbox: 'spares_complete_2', notes: 'spares_notes_2' },
-])}
+${CHECKLIST_SECTIONS.map((section) => renderChecklistSection(section.title, section.rows)).join('\n')}
         <section class="card">
           <h2>Additional notes</h2>
 ${renderTextInput('general_notes', 'Overall notes', { textarea: true, type: 'textarea-lg', placeholder: 'Record any observations or follow-up actions' })}
@@ -1729,10 +2064,7 @@ ${renderTextInput('general_notes', 'Overall notes', { textarea: true, type: 'tex
           </div>
         </section>
 ${partsTable()}
-${renderChecklistSection('Sign off checklist', [
-  { action: 'LED equipment maintained and preventative work completed.', checkbox: 'signoff_complete_1', notes: 'signoff_notes_1', checked: true },
-  { action: 'Outstanding actions noted for customer follow-up.', checkbox: 'signoff_complete_2', notes: 'signoff_notes_2' },
-])}
+${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
 
         <section class="card">
           <h2>Signatures</h2>
@@ -2239,6 +2571,78 @@ ${renderChecklistSection('Sign off checklist', [
           });
         }
 
+        function setupAutoSuggestions() {
+          const inputs = document.querySelectorAll('input[data-suggest-field]');
+          if (!inputs.length || typeof fetch !== 'function') return;
+
+          inputs.forEach((input) => {
+            const fieldName = input.dataset.suggestField;
+            if (!fieldName) return;
+            const listId = input.getAttribute('list');
+            if (!listId) return;
+            const dataList = document.getElementById(listId);
+            if (!dataList) return;
+
+            let lastQuery = '';
+            let pendingController = null;
+
+            const applySuggestions = (values) => {
+              dataList.innerHTML = '';
+              if (!Array.isArray(values) || !values.length) {
+                return;
+              }
+              values.forEach((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                dataList.appendChild(option);
+              });
+            };
+
+            const requestSuggestions = (rawValue) => {
+              const query = (rawValue || '').trim();
+              if (query.length < 3) {
+                lastQuery = '';
+                applySuggestions([]);
+                if (pendingController && typeof pendingController.abort === 'function') {
+                  pendingController.abort();
+                }
+                pendingController = null;
+                return;
+              }
+              if (query === lastQuery) {
+                return;
+              }
+              lastQuery = query;
+              if (pendingController && typeof pendingController.abort === 'function') {
+                pendingController.abort();
+              }
+              pendingController =
+                typeof AbortController === 'function' ? new AbortController() : null;
+              const params =
+                '?field=' + encodeURIComponent(fieldName) + '&q=' + encodeURIComponent(query);
+              const init = pendingController ? { signal: pendingController.signal } : undefined;
+              fetch('/suggest' + params, init)
+                .then((response) => (response.ok ? response.json() : null))
+                .then((payload) => {
+                  if (!payload || !Array.isArray(payload.suggestions)) {
+                    applySuggestions([]);
+                    return;
+                  }
+                  applySuggestions(payload.suggestions);
+                })
+                .catch((err) => {
+                  if (err && err.name === 'AbortError') {
+                    return;
+                  }
+                  console.warn('Suggestion lookup failed', err);
+                });
+            };
+
+            input.addEventListener('input', () => requestSuggestions(input.value));
+            input.addEventListener('focus', () => requestSuggestions(input.value));
+          });
+        }
+
         if (debugToggleEl) {
           let stored = null;
           try {
@@ -2258,6 +2662,7 @@ ${renderChecklistSection('Sign off checklist', [
         setupPartsTable();
         setupPhotoUploads();
         setupSignaturePads();
+        setupAutoSuggestions();
         updateFilesSummary();
 
         formEl.addEventListener('submit', (event) => {
@@ -2607,6 +3012,21 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
+app.get('/suggest', (req, res) => {
+  const fieldParam = typeof req.query.field === 'string' ? req.query.field.trim() : '';
+  const queryParam = typeof req.query.q === 'string' ? req.query.q : '';
+  if (!fieldParam) {
+    return res.status(400).json({ ok: false, error: 'Missing field parameter.' });
+  }
+  const suggestions = getSuggestionsForField(fieldParam, queryParam);
+  return res.json({
+    ok: true,
+    field: fieldParam,
+    query: queryParam,
+    suggestions,
+  });
+});
+
 app.post('/submit', (req, res, next) => {
   uploadFields(req, res, (err) => {
     if (err) {
@@ -2774,13 +3194,14 @@ app.post('/submit', (req, res, next) => {
     hiddenPartRows = partsRowUsage.filter((row) => !row.hasData).map((row) => row.number);
     partsRowsRendered = partsRowUsage.filter((row) => row.hasData).map((row) => row.number);
 
-    clearOriginalSignoffSection(pdfDoc);
+    const clearedSignoff = clearOriginalSignoffSection(pdfDoc);
     const signaturePlacements = await drawSignOffPage(
       pdfDoc,
       helveticaFont,
       sanitizedBody,
       signatureImages,
       partsRowUsage,
+      { targetPage: clearedSignoff ? clearedSignoff.page : undefined },
     );
 
     const pages = pdfDoc.getPages();
@@ -2856,6 +3277,8 @@ app.post('/submit', (req, res, next) => {
       JSON.stringify(metadata, null, 2),
       'utf8'
     );
+
+    recordSuggestionsFromSubmission(req.body || {});
 
     const hostUrl = HOST_URL_ENV || `${req.protocol}://${req.get('host')}`;
     const downloadUrl = `${hostUrl.replace(/\/$/, '')}/download/${encodeURIComponent(filename)}`;

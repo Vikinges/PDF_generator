@@ -442,11 +442,13 @@
           <div class="grid two-col">
         <label class="field" for="end-customer-name">
           <span>End customer name</span>
-          <input type="text" id="end-customer-name" name="end_customer_name" value="Mercedes-Benz AG" placeholder="End customer name" />
+          <input type="text" id="end-customer-name" name="end_customer_name" value="Mercedes-Benz AG" placeholder="End customer name" data-suggest-field="end_customer_name" list="suggest-end-customer-name" autocomplete="off" />
+          <datalist id="suggest-end-customer-name" data-suggest-list="end_customer_name"></datalist>
         </label>
         <label class="field" for="site-location">
           <span>Site location</span>
-          <input type="text" id="site-location" name="site_location" value="Flughafen Berlin Brandenburg, Melli-Beese Ring 1" placeholder="Site location" />
+          <input type="text" id="site-location" name="site_location" value="Flughafen Berlin Brandenburg, Melli-Beese Ring 1" placeholder="Site location" data-suggest-field="site_location" list="suggest-site-location" autocomplete="off" />
+          <datalist id="suggest-site-location" data-suggest-list="site_location"></datalist>
         </label>
         <label class="field" for="led-display-model">
           <span>LED display model</span>
@@ -462,7 +464,8 @@
         </label>
         <label class="field" for="service-company-name">
           <span>Service company name</span>
-          <input type="text" id="service-company-name" name="service_company_name" value="Sharp / NEC LED Solution Center" placeholder="Service company name" />
+          <input type="text" id="service-company-name" name="service_company_name" value="Sharp / NEC LED Solution Center" placeholder="Service company name" data-suggest-field="service_company_name" list="suggest-service-company-name" autocomplete="off" />
+          <datalist id="suggest-service-company-name" data-suggest-list="service_company_name"></datalist>
         </label>
           </div>
         </section>
@@ -781,7 +784,8 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           <div class="grid two-col signature-info">
                     <label class="field" for="engineer-company">
           <span>On-site engineer company</span>
-          <input type="text" id="engineer-company" name="engineer_company" value="LSC Sharp NEC" placeholder="On-site engineer company" />
+          <input type="text" id="engineer-company" name="engineer_company" value="LSC Sharp NEC" placeholder="On-site engineer company" data-suggest-field="engineer_company" list="suggest-engineer-company" autocomplete="off" />
+          <datalist id="suggest-engineer-company" data-suggest-list="engineer_company"></datalist>
         </label>
                     <label class="field" for="engineer-datetime">
           <span>Engineer date &amp; time</span>
@@ -789,11 +793,13 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         </label>
                     <label class="field" for="engineer-name">
           <span>Engineer name</span>
-          <input type="text" id="engineer-name" name="engineer_name" value="Ivan Technician" placeholder="Engineer name" />
+          <input type="text" id="engineer-name" name="engineer_name" value="Ivan Technician" placeholder="Engineer name" data-suggest-field="engineer_name" list="suggest-engineer-name" autocomplete="off" />
+          <datalist id="suggest-engineer-name" data-suggest-list="engineer_name"></datalist>
         </label>
                     <label class="field" for="customer-company">
           <span>Customer company</span>
-          <input type="text" id="customer-company" name="customer_company" value="Mercedes-Benz AG" placeholder="Customer company" />
+          <input type="text" id="customer-company" name="customer_company" value="Mercedes-Benz AG" placeholder="Customer company" data-suggest-field="customer_company" list="suggest-customer-company" autocomplete="off" />
+          <datalist id="suggest-customer-company" data-suggest-list="customer_company"></datalist>
         </label>
                     <label class="field" for="customer-datetime">
           <span>Customer date &amp; time</span>
@@ -801,7 +807,8 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         </label>
                     <label class="field" for="customer-name">
           <span>Customer name</span>
-          <input type="text" id="customer-name" name="customer_name" value="Anna Schneider" placeholder="Customer name" />
+          <input type="text" id="customer-name" name="customer_name" value="Anna Schneider" placeholder="Customer name" data-suggest-field="customer_name" list="suggest-customer-name" autocomplete="off" />
+          <datalist id="suggest-customer-name" data-suggest-list="customer_name"></datalist>
         </label>
           </div>
           <div class="signature-row">
@@ -1317,6 +1324,78 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           });
         }
 
+        function setupAutoSuggestions() {
+          const inputs = document.querySelectorAll('input[data-suggest-field]');
+          if (!inputs.length || typeof fetch !== 'function') return;
+
+          inputs.forEach((input) => {
+            const fieldName = input.dataset.suggestField;
+            if (!fieldName) return;
+            const listId = input.getAttribute('list');
+            if (!listId) return;
+            const dataList = document.getElementById(listId);
+            if (!dataList) return;
+
+            let lastQuery = '';
+            let pendingController = null;
+
+            const applySuggestions = (values) => {
+              dataList.innerHTML = '';
+              if (!Array.isArray(values) || !values.length) {
+                return;
+              }
+              values.forEach((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                dataList.appendChild(option);
+              });
+            };
+
+            const requestSuggestions = (rawValue) => {
+              const query = (rawValue || '').trim();
+              if (query.length < 3) {
+                lastQuery = '';
+                applySuggestions([]);
+                if (pendingController && typeof pendingController.abort === 'function') {
+                  pendingController.abort();
+                }
+                pendingController = null;
+                return;
+              }
+              if (query === lastQuery) {
+                return;
+              }
+              lastQuery = query;
+              if (pendingController && typeof pendingController.abort === 'function') {
+                pendingController.abort();
+              }
+              pendingController =
+                typeof AbortController === 'function' ? new AbortController() : null;
+              const params =
+                '?field=' + encodeURIComponent(fieldName) + '&q=' + encodeURIComponent(query);
+              const init = pendingController ? { signal: pendingController.signal } : undefined;
+              fetch('/suggest' + params, init)
+                .then((response) => (response.ok ? response.json() : null))
+                .then((payload) => {
+                  if (!payload || !Array.isArray(payload.suggestions)) {
+                    applySuggestions([]);
+                    return;
+                  }
+                  applySuggestions(payload.suggestions);
+                })
+                .catch((err) => {
+                  if (err && err.name === 'AbortError') {
+                    return;
+                  }
+                  console.warn('Suggestion lookup failed', err);
+                });
+            };
+
+            input.addEventListener('input', () => requestSuggestions(input.value));
+            input.addEventListener('focus', () => requestSuggestions(input.value));
+          });
+        }
+
         if (debugToggleEl) {
           let stored = null;
           try {
@@ -1336,6 +1415,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         setupPartsTable();
         setupPhotoUploads();
         setupSignaturePads();
+        setupAutoSuggestions();
         updateFilesSummary();
 
         formEl.addEventListener('submit', (event) => {
