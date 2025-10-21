@@ -192,6 +192,118 @@
         font-size: 0.85rem;
         color: #6b7280;
       }
+      .employee-card p {
+        margin: 0;
+        color: #4c4f63;
+      }
+      .employee-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .employee-actions .button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        border-radius: 999px;
+        padding: 0.6rem 1.2rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .employee-actions .button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .employee-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      .employee-row {
+        border: 1px solid #c7d2fe;
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        background: #eef2ff;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+      }
+      .employee-row-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+        color: #1f2a5b;
+        font-size: 0.95rem;
+      }
+      .employee-grid {
+        display: grid;
+        gap: 0.75rem 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        align-items: end;
+      }
+      .employee-grid .field > span,
+      .field-datetime > span {
+        font-size: 0.85rem;
+        color: #4b5563;
+      }
+      .field-datetime {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      .field-datetime .datetime-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      .field-datetime .datetime-inputs input {
+        padding: 0.55rem;
+        border: 1px solid #c7cbef;
+        border-radius: 8px;
+        background: #ffffff;
+        font: inherit;
+      }
+      .employee-duration {
+        font-weight: 600;
+        color: #1d4ed8;
+        white-space: pre-line;
+        font-size: 0.9rem;
+      }
+      .employee-summary {
+        margin-top: 0.5rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #d8d8e5;
+        display: grid;
+        gap: 0.35rem;
+        font-weight: 600;
+        color: #1f2a5b;
+      }
+      .employee-summary span {
+        display: block;
+      }
+      .employee-summary [data-employee-total] {
+        white-space: pre-line;
+      }
+      @media (min-width: 640px) {
+        .employee-summary {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          align-items: start;
+        }
+      }
+      .link-button {
+        background: none;
+        border: none;
+        color: #2563eb;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0;
+      }
+      .link-button:disabled {
+        color: #a1a1b3;
+        cursor: default;
+      }
       .photos-card {
         display: grid;
         gap: 1rem;
@@ -779,35 +891,83 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
         </table>
       </section>
 
+        <section class="card employee-card" data-employees-section data-employee-max="20">
+          <h2>On-site team</h2>
+          <p>Record every team member on site to capture arrival/departure time and required breaks.</p>
+          <div class="employee-actions">
+            <button type="button" class="button" data-action="employee-add">+ Add employee</button>
+          </div>
+          <div class="employee-list" data-employee-list></div>
+          <div class="employee-summary" data-employee-summary>
+            <span data-employee-total>Working time: 0m | Required breaks: pending</span>
+            <span data-employee-count>No employees added yet.</span>
+          </div>
+          <template id="employee-row-template">
+            <div class="employee-row" data-employee-row>
+              <div class="employee-row-header">
+                <span data-employee-title>Employee #1</span>
+                <button type="button" class="link-button" data-action="employee-remove">Remove</button>
+              </div>
+              <div class="employee-grid">
+                <label class="field" data-field-wrapper="name">
+                  <span>Employee name</span>
+                  <input type="text" data-field="name" placeholder="Full name" autocomplete="off" />
+                </label>
+                <label class="field" data-field-wrapper="role">
+                  <span>Role / position</span>
+                  <input type="text" data-field="role" placeholder="Role on site" autocomplete="off" />
+                </label>
+                <div class="field field-datetime" data-datetime-field="arrival">
+                  <span>Arrival (24h)</span>
+                  <div class="datetime-inputs">
+                    <input type="date" data-datetime-part="date" />
+                    <input type="time" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" placeholder="HH:MM" />
+                  </div>
+                  <input type="hidden" data-field="arrival" />
+                </div>
+                <div class="field field-datetime" data-datetime-field="departure">
+                  <span>Departure (24h)</span>
+                  <div class="datetime-inputs">
+                    <input type="date" data-datetime-part="date" />
+                    <input type="time" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" placeholder="HH:MM" />
+                  </div>
+                  <input type="hidden" data-field="departure" />
+                </div>
+              </div>
+              <div class="employee-duration" data-employee-duration>Working time: 0m | Break: pending</div>
+            </div>
+          </template>
+        </section>
+
         <section class="card">
           <h2>Signatures</h2>
           <div class="grid two-col signature-info">
                     <label class="field" for="engineer-company">
           <span>On-site engineer company</span>
-          <input type="text" id="engineer-company" name="engineer_company" value="LSC Sharp NEC" placeholder="On-site engineer company" data-suggest-field="engineer_company" list="suggest-engineer-company" autocomplete="off" />
+          <input type="text" id="engineer-company" name="engineer_company" placeholder="On-site engineer company" data-suggest-field="engineer_company" list="suggest-engineer-company" autocomplete="off" />
           <datalist id="suggest-engineer-company" data-suggest-list="engineer_company"></datalist>
         </label>
                     <label class="field" for="engineer-datetime">
           <span>Engineer date &amp; time</span>
-          <input type="datetime-local" id="engineer-datetime" name="engineer_datetime" value="2024-06-24T10:30" placeholder="Engineer date &amp; time" />
+          <input type="datetime-local" id="engineer-datetime" name="engineer_datetime" placeholder="Engineer date &amp; time" step="60" lang="en-GB" />
         </label>
                     <label class="field" for="engineer-name">
           <span>Engineer name</span>
-          <input type="text" id="engineer-name" name="engineer_name" value="Ivan Technician" placeholder="Engineer name" data-suggest-field="engineer_name" list="suggest-engineer-name" autocomplete="off" />
+          <input type="text" id="engineer-name" name="engineer_name" placeholder="Engineer name" data-suggest-field="engineer_name" list="suggest-engineer-name" autocomplete="off" />
           <datalist id="suggest-engineer-name" data-suggest-list="engineer_name"></datalist>
         </label>
                     <label class="field" for="customer-company">
           <span>Customer company</span>
-          <input type="text" id="customer-company" name="customer_company" value="Mercedes-Benz AG" placeholder="Customer company" data-suggest-field="customer_company" list="suggest-customer-company" autocomplete="off" />
+          <input type="text" id="customer-company" name="customer_company" placeholder="Customer company" data-suggest-field="customer_company" list="suggest-customer-company" autocomplete="off" />
           <datalist id="suggest-customer-company" data-suggest-list="customer_company"></datalist>
         </label>
                     <label class="field" for="customer-datetime">
           <span>Customer date &amp; time</span>
-          <input type="datetime-local" id="customer-datetime" name="customer_datetime" value="2024-06-24T11:15" placeholder="Customer date &amp; time" />
+          <input type="datetime-local" id="customer-datetime" name="customer_datetime" placeholder="Customer date &amp; time" step="60" lang="en-GB" />
         </label>
                     <label class="field" for="customer-name">
           <span>Customer name</span>
-          <input type="text" id="customer-name" name="customer_name" value="Anna Schneider" placeholder="Customer name" data-suggest-field="customer_name" list="suggest-customer-name" autocomplete="off" />
+          <input type="text" id="customer-name" name="customer_name" placeholder="Customer name" data-suggest-field="customer_name" list="suggest-customer-name" autocomplete="off" />
           <datalist id="suggest-customer-name" data-suggest-list="customer_name"></datalist>
         </label>
           </div>
@@ -1080,6 +1240,22 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           });
         }
 
+        function setupAutoResizeTextareas() {
+          const textareas = document.querySelectorAll('textarea[data-auto-resize]');
+          if (!textareas.length) return;
+          const resize = (textarea) => {
+            textarea.style.height = 'auto';
+            const newHeight = Math.max(textarea.scrollHeight, 44);
+            textarea.style.height = newHeight + 'px';
+          };
+          textareas.forEach((textarea) => {
+            textarea.style.overflow = 'hidden';
+            resize(textarea);
+            textarea.addEventListener('input', () => resize(textarea));
+            textarea.addEventListener('change', () => resize(textarea));
+          });
+        }
+
         function setupPartsTable() {
           const table = document.querySelector('[data-parts-table]');
           if (!table) return;
@@ -1151,6 +1327,600 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           }
         }
 
+        function setupEmployees() {
+          const section = document.querySelector('[data-employees-section]');
+          if (!section) return;
+
+          const listEl = section.querySelector('[data-employee-list]');
+          const template = section.querySelector('#employee-row-template');
+          const addButton = section.querySelector('[data-action="employee-add"]');
+          const summaryEl = section.querySelector('[data-employee-summary]');
+          const summaryTotalEl = summaryEl ? summaryEl.querySelector('[data-employee-total]') : null;
+          const summaryCountEl = summaryEl ? summaryEl.querySelector('[data-employee-count]') : null;
+
+          if (!listEl || !template) return;
+
+          const engineerNameInput = document.querySelector('#engineer-name');
+          const engineerDatetimeInput = document.querySelector('#engineer-datetime');
+
+          const maxRows = Math.max(1, Number(section.dataset.employeeMax || '0') || 20);
+          const DEFAULT_SHIFT_MINUTES = 8 * 60;
+          const rowStates = new Map();
+          let suppressSummaryLog = false;
+
+          const signoffSync = {
+            name: { manual: false, syncedValue: '' },
+            datetime: { manual: false, syncedValue: '' },
+          };
+
+          const pad = (value) => (value < 10 ? '0' + value : String(value));
+
+          const formatIsoFromDate = (date) => {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+              return '';
+            }
+            return (
+              date.getFullYear() +
+              '-' +
+              pad(date.getMonth() + 1) +
+              '-' +
+              pad(date.getDate()) +
+              'T' +
+              pad(date.getHours()) +
+              ':' +
+              pad(date.getMinutes())
+            );
+          };
+
+          const parseLocalDateTime = (value) => {
+            if (typeof value !== 'string') return null;
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            const match = /^(d{4})-(d{2})-(d{2})[T ](d{2}):(d{2})$/.exec(trimmed);
+            if (!match) return null;
+            const date = new Date(
+              Number(match[1]),
+              Number(match[2]) - 1,
+              Number(match[3]),
+              Number(match[4]),
+              Number(match[5]),
+              0,
+              0
+            );
+            if (Number.isNaN(date.getTime())) return null;
+            return date;
+          };
+
+          const nowLocalIso = () => formatIsoFromDate(new Date());
+
+          const addMinutesToIso = (iso, minutes) => {
+            const base = parseLocalDateTime(iso);
+            if (!base) return '';
+            const delta = Number(minutes || 0);
+            if (Number.isNaN(delta)) return iso;
+            base.setMinutes(base.getMinutes() + delta);
+            return formatIsoFromDate(base);
+          };
+
+          const formatEmployeeDuration = (minutes) => {
+            if (!Number.isFinite(minutes) || minutes <= 0) return '0m';
+            const rounded = Math.round(minutes);
+            const hours = Math.floor(rounded / 60);
+            const mins = Math.max(0, rounded - hours * 60);
+            const parts = [];
+            if (hours) parts.push(hours + 'h');
+            if (mins) parts.push(mins + 'm');
+            return parts.length ? parts.join(' ') : '0m';
+          };
+
+          const determineBreakRequirement = (minutes) => {
+            if (!Number.isFinite(minutes) || minutes <= 0) {
+              return { code: 'UNKNOWN', minutes: 0, label: 'Pending (set arrival and departure)' };
+            }
+            if (minutes <= 6 * 60) {
+              return { code: 'NONE', minutes: 0, label: 'No mandatory break (<=6h)' };
+            }
+            if (minutes <= 9 * 60) {
+              return { code: 'MIN30', minutes: 30, label: '>=30m (6-9h, 2x15m allowed)' };
+            }
+            return { code: 'MIN45', minutes: 45, label: '>=45m (>9h)' };
+          };
+
+          const formatBreakStatsSummary = (stats) => {
+            if (!stats) return '';
+            const descriptors = [
+              { key: 'MIN45', label: '>=45m (>9h)' },
+              { key: 'MIN30', label: '>=30m (6-9h, 2x15m)' },
+              { key: 'NONE', label: 'no mandatory break (<=6h)' },
+            ];
+            const parts = [];
+            descriptors.forEach(({ key, label }) => {
+              const count = Number(stats[key] || 0);
+              if (count > 0) {
+                parts.push(count + ' x ' + label);
+              }
+            });
+            const pending = Number(stats.UNKNOWN || 0);
+            if (pending > 0 && parts.length) {
+              parts.push(pending + ' x pending');
+            }
+            return parts.join(', ');
+          };
+
+          const rowElements = () => Array.from(listEl.querySelectorAll('[data-employee-row]'));
+          const isPrimaryRow = (row) => row && row === rowElements()[0];
+
+          const ensureEngineerDefaults = () => {
+            if (engineerDatetimeInput && !engineerDatetimeInput.value) {
+              engineerDatetimeInput.value = nowLocalIso();
+              signoffSync.datetime.syncedValue = engineerDatetimeInput.value;
+            }
+          };
+
+          ensureEngineerDefaults();
+
+          if (engineerNameInput) {
+            engineerNameInput.addEventListener('input', () => {
+              signoffSync.name.manual = true;
+            });
+          }
+          if (engineerDatetimeInput) {
+            engineerDatetimeInput.addEventListener('input', () => {
+              signoffSync.datetime.manual = true;
+            });
+          }
+
+          function setDateTimeValue(row, field, iso) {
+            const wrapper = row.querySelector('[data-datetime-field="' + field + '"]');
+            if (!wrapper) return;
+            const hidden = wrapper.querySelector('input[data-field="' + field + '"]');
+            const dateInput = wrapper.querySelector('input[data-datetime-part="date"]');
+            const timeInput = wrapper.querySelector('input[data-datetime-part="time"]');
+            const safeIso = iso || '';
+            if (hidden) hidden.value = safeIso;
+            if (dateInput || timeInput) {
+              const parts = safeIso.split('T');
+              if (dateInput) dateInput.value = parts[0] || '';
+              if (timeInput) timeInput.value = parts[1] ? parts[1].slice(0, 5) : '';
+            }
+          }
+
+          function getDateTimePair(row, field) {
+            const wrapper = row.querySelector('[data-datetime-field="' + field + '"]');
+            if (!wrapper) return null;
+            return {
+              dateInput: wrapper.querySelector('input[data-datetime-part="date"]'),
+              timeInput: wrapper.querySelector('input[data-datetime-part="time"]'),
+              hiddenInput: wrapper.querySelector('input[data-field="' + field + '"]'),
+            };
+          }
+
+          function combineDateTimeValue(row, field) {
+            const pair = getDateTimePair(row, field);
+            if (!pair) return '';
+            const dateValue = pair.dateInput ? pair.dateInput.value.trim() : '';
+            const timeValue = pair.timeInput ? pair.timeInput.value.trim() : '';
+            const iso = dateValue && timeValue ? dateValue + 'T' + timeValue : '';
+            if (pair.hiddenInput) {
+              pair.hiddenInput.value = iso;
+            }
+            return iso;
+          }
+
+          function updateRowDurationDisplay(row, state) {
+            const target = row.querySelector('[data-employee-duration]');
+            if (!target) return;
+            target.textContent =
+              'Working time: ' +
+              formatEmployeeDuration(state.durationMinutes) +
+              ' | Break: ' +
+              state.breakLabel;
+          }
+
+          const updateControlState = () => {
+            if (addButton) {
+              addButton.disabled = rowElements().length >= maxRows;
+            }
+          };
+
+          function renumberRows() {
+            rowElements().forEach((row, index) => {
+              row.dataset.index = String(index + 1);
+              const title = row.querySelector('[data-employee-title]');
+              if (title) {
+                title.textContent = 'Employee #' + (index + 1);
+              }
+              const setName = (selector, field) => {
+                const input = row.querySelector(selector);
+                if (input) {
+                  input.name = 'employees[' + index + '][' + field + ']';
+                }
+              };
+              setName('input[data-field="name"]', 'name');
+              setName('input[data-field="role"]', 'role');
+              setName('input[data-field="arrival"]', 'arrival');
+              setName('input[data-field="departure"]', 'departure');
+            });
+            updateControlState();
+          }
+
+          function updateSummary(reason) {
+            const summary = {
+              count: 0,
+              totalMinutes: 0,
+              totalBreakMinutes: 0,
+              breakStats: { NONE: 0, MIN30: 0, MIN45: 0, UNKNOWN: 0 },
+            };
+            rowElements().forEach((row) => {
+              const state = rowStates.get(row);
+              if (!state || !state.hasData) return;
+              summary.count += 1;
+              summary.totalMinutes += state.durationMinutes;
+              summary.totalBreakMinutes += state.breakRequiredMinutes;
+              if (summary.breakStats[state.breakCode] === undefined) {
+                summary.breakStats.UNKNOWN += 1;
+              } else {
+                summary.breakStats[state.breakCode] += 1;
+              }
+            });
+
+            if (summaryTotalEl) {
+              if (summary.count === 0) {
+                summaryTotalEl.textContent = 'Working time: 0m | Required breaks: pending';
+              } else {
+                summaryTotalEl.textContent =
+                  'Working time: ' +
+                  formatEmployeeDuration(summary.totalMinutes) +
+                  ' | Required breaks: ' +
+                  formatEmployeeDuration(summary.totalBreakMinutes);
+              }
+            }
+
+            if (summaryCountEl) {
+              if (summary.count === 0) {
+                summaryCountEl.textContent = 'No employees added yet.';
+              } else {
+                const base =
+                  summary.count === 1
+                    ? '1 employee recorded.'
+                    : summary.count + ' employees recorded.';
+                const breakSummary = formatBreakStatsSummary(summary.breakStats);
+                summaryCountEl.textContent = breakSummary ? base + ' ' + breakSummary : base;
+              }
+            }
+
+            if (!suppressSummaryLog) {
+              recordDebug('employee-summary', {
+                reason: reason || 'update',
+                totalMinutes: summary.totalMinutes,
+                totalBreakMinutes: summary.totalBreakMinutes,
+                breakStats: summary.breakStats,
+                count: summary.count,
+              });
+            }
+
+            return summary;
+          }
+
+          function syncEngineerSignoff(primaryState) {
+            if (!primaryState) return;
+            if (engineerNameInput && !signoffSync.name.manual && primaryState.name) {
+              engineerNameInput.value = primaryState.name;
+              signoffSync.name.syncedValue = primaryState.name;
+            }
+            if (engineerDatetimeInput && !signoffSync.datetime.manual) {
+              const candidate = primaryState.departure || primaryState.arrival || nowLocalIso();
+              if (candidate) {
+                engineerDatetimeInput.value = candidate;
+                signoffSync.datetime.syncedValue = candidate;
+              }
+            }
+          }
+
+          function updateRowState(row, reason, options = {}) {
+            const previous = rowStates.get(row) || {};
+            const indexLabel = row.dataset.index || '';
+            const nameInput = row.querySelector('input[data-field="name"]');
+            const roleInput = row.querySelector('input[data-field="role"]');
+
+            const name = nameInput ? nameInput.value.trim() : '';
+            const role = roleInput ? roleInput.value.trim() : '';
+            let arrivalIso = combineDateTimeValue(row, 'arrival');
+            let departureIso = combineDateTimeValue(row, 'departure');
+
+            const arrivalDate = parseLocalDateTime(arrivalIso);
+            let departureDate = parseLocalDateTime(departureIso);
+            let durationMinutes = 0;
+
+            if (arrivalDate && !departureDate) {
+              departureDate = new Date(arrivalDate.getTime() + 60 * 60000);
+              departureIso = formatIsoFromDate(departureDate);
+              setDateTimeValue(row, 'departure', departureIso);
+            }
+
+            if (arrivalDate && departureDate) {
+              durationMinutes = Math.round((departureDate.getTime() - arrivalDate.getTime()) / 60000);
+              if (durationMinutes <= 0) {
+                departureDate = new Date(arrivalDate.getTime() + 15 * 60000);
+                departureIso = formatIsoFromDate(departureDate);
+                setDateTimeValue(row, 'departure', departureIso);
+                durationMinutes = 15;
+              }
+            }
+
+            const breakInfo = determineBreakRequirement(durationMinutes);
+            const hasData = Boolean(name || role || arrivalIso || departureIso);
+
+            let syncedWithPrimary = previous.syncedWithPrimary || false;
+            if (options.markSynced === true) {
+              syncedWithPrimary = true;
+            } else if (reason !== 'primary-sync' && !options.preserveSyncFlag) {
+              syncedWithPrimary = false;
+            }
+
+            const state = {
+              hasData,
+              name,
+              role,
+              arrival: arrivalIso,
+              departure: departureIso,
+              durationMinutes,
+              breakCode: breakInfo.code,
+              breakRequiredMinutes: breakInfo.minutes,
+              breakLabel: breakInfo.label,
+              syncedWithPrimary,
+            };
+
+            updateRowDurationDisplay(row, state);
+            rowStates.set(row, state);
+
+            if (!suppressSummaryLog && options.logDebug !== false) {
+              recordDebug('employee-updated', {
+                index: indexLabel,
+                reason: reason || 'change',
+                hasData,
+                durationMinutes,
+                breakCode: breakInfo.code,
+                syncedWithPrimary,
+              });
+            }
+
+            if (isPrimaryRow(row)) {
+              if (!options.skipPropagation) {
+                propagatePrimarySchedule();
+              }
+              syncEngineerSignoff(state);
+            }
+
+            return state;
+          }
+
+          function propagatePrimarySchedule() {
+            const rows = rowElements();
+            if (!rows.length) return;
+            const primaryRow = rows[0];
+            const primaryState = rowStates.get(primaryRow);
+            if (!primaryState || !primaryState.arrival) return;
+
+            let summaryPending = false;
+            rows.slice(1).forEach((row) => {
+              const state = rowStates.get(row);
+              if (!state || !state.hasData || state.syncedWithPrimary) {
+                setDateTimeValue(row, 'arrival', primaryState.arrival);
+                setDateTimeValue(row, 'departure', primaryState.departure || '');
+                updateRowState(row, 'primary-sync', {
+                  markSynced: true,
+                  skipPropagation: true,
+                  logDebug: false,
+                  preserveSyncFlag: true,
+                });
+                summaryPending = true;
+              }
+            });
+
+            if (summaryPending) {
+              updateSummary('primary-sync');
+            }
+          }
+
+          function attachListeners(row) {
+            row
+              .querySelectorAll('input[data-field]:not([type="hidden"])')
+              .forEach((input) => {
+                input.addEventListener('input', () => {
+                  updateRowState(row, 'input');
+                  updateSummary('input');
+                });
+                input.addEventListener('change', () => {
+                  updateRowState(row, 'change');
+                  updateSummary('change');
+                });
+              });
+
+            ['arrival', 'departure'].forEach((field) => {
+              const pair = getDateTimePair(row, field);
+              if (!pair) return;
+              [pair.dateInput, pair.timeInput].forEach((input) => {
+                if (!input) return;
+                input.addEventListener('input', () => {
+                  updateRowState(row, 'datetime');
+                  updateSummary('datetime');
+                });
+                input.addEventListener('change', () => {
+                  updateRowState(row, 'datetime');
+                  updateSummary('datetime');
+                });
+              });
+            });
+
+            const removeBtn = row.querySelector('[data-action="employee-remove"]');
+            if (removeBtn) {
+              removeBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                recordDebug('employee-removed', { index: row.dataset.index });
+                rowStates.delete(row);
+                row.remove();
+                renumberRows();
+                updateSummary('remove');
+                propagatePrimarySchedule();
+                const primaryRow = rowElements()[0];
+                if (primaryRow) {
+                  const primaryState = rowStates.get(primaryRow);
+                  if (primaryState) {
+                    primaryState.syncedWithPrimary = false;
+                    rowStates.set(primaryRow, primaryState);
+                    syncEngineerSignoff(primaryState);
+                  }
+                }
+              });
+            }
+          }
+
+          function addRow(data = {}, options = {}) {
+            const existing = rowElements().length;
+            if (existing >= maxRows) {
+              if (!options.silent) {
+                recordDebug('employee-add-blocked', { reason: 'max-reached', max: maxRows });
+              }
+              return null;
+            }
+
+            const fragment = template.content.cloneNode(true);
+            const row = fragment.querySelector('[data-employee-row]');
+            listEl.appendChild(fragment);
+            renumberRows();
+
+            const isPrimary = isPrimaryRow(row);
+            const primaryState = rowStates.get(rowElements()[0]) || null;
+
+            const nameInput = row.querySelector('input[data-field="name"]');
+            if (nameInput) {
+              nameInput.value = data.name ? String(data.name) : '';
+            }
+            const roleInput = row.querySelector('input[data-field="role"]');
+            if (roleInput) {
+              roleInput.value = data.role ? String(data.role) : '';
+            }
+
+            const arrivalValue =
+              (data.arrival ? String(data.arrival) : '') ||
+              (isPrimary ? nowLocalIso() : primaryState?.arrival) ||
+              options.prefillArrival ||
+              nowLocalIso();
+
+            const departureValue =
+              (data.departure ? String(data.departure) : '') ||
+              (isPrimary ? addMinutesToIso(arrivalValue, DEFAULT_SHIFT_MINUTES) : primaryState?.departure) ||
+              options.prefillDeparture ||
+              addMinutesToIso(arrivalValue, DEFAULT_SHIFT_MINUTES);
+
+            setDateTimeValue(row, 'arrival', arrivalValue);
+            setDateTimeValue(row, 'departure', departureValue);
+
+            attachListeners(row);
+
+            const state = updateRowState(
+              row,
+              options.summaryTrigger || (isPrimary ? 'init' : 'seed'),
+              {
+                markSynced: !isPrimary,
+                skipPropagation: !isPrimary && Boolean(primaryState),
+                logDebug: !options.silent,
+              },
+            );
+
+            const summaryReason =
+              options.summaryTrigger ||
+              (state.hasData ? (isPrimary ? 'init' : 'seed') : 'refresh');
+            updateSummary(summaryReason);
+
+            if (!options.silent) {
+              recordDebug('employee-added', {
+                index: row.dataset.index,
+                seeded: Boolean(options.summaryTrigger === 'seed'),
+                syncedWithPrimary: !isPrimary,
+              });
+              const focusTarget = row.querySelector('input[data-field="name"]');
+              if (focusTarget) {
+                focusTarget.focus();
+              }
+            }
+
+            return row;
+          }
+
+          let seedEmployees = [];
+          if (section.dataset.employeesSeed) {
+            try {
+              const parsed = JSON.parse(section.dataset.employeesSeed);
+              if (Array.isArray(parsed)) {
+                seedEmployees = parsed.slice(0, maxRows);
+              }
+            } catch (err) {
+              recordDebug('employee-seed-error', { message: err.message });
+            }
+          }
+
+          suppressSummaryLog = true;
+          if (seedEmployees.length) {
+            seedEmployees.forEach((employee) => {
+              addRow(
+                {
+                  name: employee.name,
+                  role: employee.role,
+                  arrival: employee.arrival,
+                  departure: employee.departure,
+                },
+                { silent: true, summaryTrigger: 'seed' },
+              );
+            });
+          } else {
+            addRow(
+              {},
+              {
+                silent: true,
+                summaryTrigger: 'init',
+              },
+            );
+          }
+          suppressSummaryLog = false;
+          updateSummary('init');
+          propagatePrimarySchedule();
+          const primaryRow = rowElements()[0];
+          if (primaryRow) {
+            const primaryState = rowStates.get(primaryRow);
+            if (primaryState) {
+              primaryState.syncedWithPrimary = false;
+              rowStates.set(primaryRow, primaryState);
+              syncEngineerSignoff(primaryState);
+            }
+          }
+
+          if (addButton) {
+            addButton.addEventListener('click', (event) => {
+              event.preventDefault();
+              const primaryState = rowStates.get(rowElements()[0]);
+              const baseArrival = (primaryState && primaryState.arrival) || nowLocalIso();
+              const row = addRow(
+                {},
+                {
+                  prefillArrival: baseArrival,
+                  prefillDeparture:
+                    (primaryState && primaryState.departure) ||
+                    addMinutesToIso(baseArrival, DEFAULT_SHIFT_MINUTES),
+                  summaryTrigger: 'add',
+                },
+              );
+              if (row && primaryState && primaryState.arrival) {
+                recordDebug('employee-arrival-prefill', {
+                  index: row.dataset.index,
+                  value: primaryState.arrival,
+                });
+              }
+            });
+          }
+        }
+
         function setupPhotoUploads() {
           document.querySelectorAll('[data-photo-preview]').forEach((container) => {
             const fieldName = container.dataset.photoPreview;
@@ -1160,22 +1930,6 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             const mode = container.dataset.photoMode || (input.multiple ? 'multi' : 'single');
             handleFileSelection(fieldName, input.files, mode);
             input.addEventListener('change', () => handleFileSelection(fieldName, input.files, mode));
-          });
-        }
-
-        function setupAutoResizeTextareas() {
-          const textareas = document.querySelectorAll('textarea[data-auto-resize]');
-          if (!textareas.length) return;
-          const resize = (textarea) => {
-            textarea.style.height = 'auto';
-            const newHeight = Math.max(textarea.scrollHeight, 44);
-            textarea.style.height = newHeight + 'px';
-          };
-          textareas.forEach((textarea) => {
-            textarea.style.overflow = 'hidden';
-            resize(textarea);
-            textarea.addEventListener('input', () => resize(textarea));
-            textarea.addEventListener('change', () => resize(textarea));
           });
         }
 
@@ -1413,6 +2167,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
 
         setupAutoResizeTextareas();
         setupPartsTable();
+        setupEmployees();
         setupPhotoUploads();
         setupSignaturePads();
         setupAutoSuggestions();
