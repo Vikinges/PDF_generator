@@ -3083,8 +3083,12 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             }
           };
           input.addEventListener('input', () => {
-            const sanitized = input.value.replace(/[^0-9:]/g, '').slice(0, 5);
-            input.value = sanitized;
+            const digits = input.value.replace(/\\D/g, '').slice(0, 4);
+            let formatted = digits;
+            if (digits.length > 2) {
+              formatted = digits.slice(0, 2) + ':' + digits.slice(2);
+            }
+            input.value = formatted;
           });
           input.addEventListener('blur', enforce);
           enforce();
@@ -5060,4 +5064,5 @@ if (require.main === module) {
 }
 
 module.exports = { app, start, fieldDescriptors, templatePath };
+
 
