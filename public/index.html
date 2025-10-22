@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Preventative Maintenance Checklist</title>
+    <link
+      rel="icon"
+      type="image/gif"
+      href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+    />
     <style>
       :root {
         color-scheme: light;
@@ -1059,7 +1064,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           const trimmed = raw.trim();
           if (!trimmed) return '';
 
-          const colonMatch = /^([0-2]?\d):([0-5]?\d)$/.exec(trimmed);
+          const colonMatch = /^([0-1]?\d|2[0-3]):([0-5]?\d)$/.exec(trimmed);
           let hours;
           let minutes;
 
@@ -1069,9 +1074,8 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           } else {
             const digits = trimmed.replace(/\D/g, '');
             if (!digits.length) return '';
-            if (digits.length <= 2) {
-              hours = clampNumber(Number(digits), 0, 23);
-              minutes = 0;
+            if (digits.length < 3) {
+              return '';
             } else if (digits.length === 3) {
               hours = clampNumber(Number(digits.slice(0, 1)), 0, 23);
               minutes = clampNumber(Number(digits.slice(1)), 0, 59);
@@ -1081,9 +1085,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             }
           }
 
-          return (
-            String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
-          );
+          return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
         };
 
         const applyTimeInputBehavior = (input) => {
@@ -1155,6 +1157,28 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           const display = iso.slice(0, 10) + ' ' + iso.slice(11, 16);
           return { iso, display };
         };
+
+        const applyDateTimeTextBehavior = (input) => {
+          if (!input || input.dataset.datetimeFormatterApplied === '1') return;
+          input.dataset.datetimeFormatterApplied = '1';
+          const enforce = () => {
+            const normalized = normalizeDateTimeText(input.value);
+            if (input.value.trim() && !normalized.iso) {
+              input.classList.add('is-invalid');
+              input.setCustomValidity('Use YYYY-MM-DD HH:MM');
+            } else {
+              input.classList.remove('is-invalid');
+              input.setCustomValidity('');
+            }
+            input.value = normalized.display;
+          };
+          input.addEventListener('input', () => {
+            input.value = input.value.replace(/[^0-9 T:-]/g, '');
+          });
+          input.addEventListener('blur', enforce);
+          enforce();
+        };
+
         function formatBytes(bytes) {
           if (!Number.isFinite(bytes) || bytes <= 0) {
             return '0 B';
@@ -2488,3 +2512,4 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
     </script>
   </body>
 </html>
+

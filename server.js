@@ -2306,6 +2306,11 @@ ${rows.join('\n')}
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Preventative Maintenance Checklist</title>
+    <link
+      rel="icon"
+      type="image/gif"
+      href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+    />
     <style>
       :root {
         color-scheme: light;
@@ -3037,7 +3042,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
           const trimmed = raw.trim();
           if (!trimmed) return '';
 
-          const colonMatch = /^([0-2]?\d):([0-5]?\d)$/.exec(trimmed);
+          const colonMatch = /^([0-1]?\d|2[0-3]):([0-5]?\d)$/.exec(trimmed);
           let hours;
           let minutes;
 
@@ -3047,9 +3052,8 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
           } else {
             const digits = trimmed.replace(/\D/g, '');
             if (!digits.length) return '';
-            if (digits.length <= 2) {
-              hours = clampNumber(Number(digits), 0, 23);
-              minutes = 0;
+            if (digits.length < 3) {
+              return '';
             } else if (digits.length === 3) {
               hours = clampNumber(Number(digits.slice(0, 1)), 0, 23);
               minutes = clampNumber(Number(digits.slice(1)), 0, 59);
@@ -3090,14 +3094,29 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
           if (typeof raw !== 'string') return { iso: '', display: '' };
           const trimmed = raw.trim();
           if (!trimmed) return { iso: '', display: '' };
-          const cleaned = trimmed
+          let cleaned = trimmed
             .replace(/[\/\.]/g, '-')
-            .replace(/t/i, ' ')
-            .replace(/\s+/g, ' ');
-          const match = /^(\d{4})-(\d{1,2})-(\d{1,2})\s+([0-2]?\d):([0-5]?\d)$/.exec(cleaned);
+            .replace(/[tT]/, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          let match = /(\d{4})-(\d{1,2})-(\d{1,2})\s+([0-2]?\d):([0-5]?\d)$/.exec(cleaned);
           if (!match) {
-            return { iso: '', display: cleaned };
+            const digitsOnly = cleaned.replace(/\D/g, '');
+            if (digitsOnly.length === 12) {
+              match = [
+                '',
+                digitsOnly.slice(0, 4),
+                digitsOnly.slice(4, 6),
+                digitsOnly.slice(6, 8),
+                digitsOnly.slice(8, 10),
+                digitsOnly.slice(10, 12),
+              ];
+            } else {
+              return { iso: '', display: cleaned };
+            }
           }
+
           const year = clampNumber(Number(match[1]), 1970, 9999);
           const month = clampNumber(Number(match[2]), 1, 12);
           const day = clampNumber(Number(match[3]), 1, 31);
@@ -3113,8 +3132,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             String(hours).padStart(2, '0') +
             ':' +
             String(minutes).padStart(2, '0');
-          const display =
-            iso.slice(0, 10) + ' ' + iso.slice(11, 16);
+          const display = iso.slice(0, 10) + ' ' + iso.slice(11, 16);
           return { iso, display };
         };
 
@@ -3133,7 +3151,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             input.value = normalized.display;
           };
           input.addEventListener('input', () => {
-            input.value = input.value.replace(/[^\d\s:-]/g, '');
+            input.value = input.value.replace(/[^0-9 T:-]/g, '');
           });
           input.addEventListener('blur', enforce);
           enforce();
@@ -5042,12 +5060,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, start, fieldDescriptors, templatePath };
-
-
-
-
-
-
-
-
 
