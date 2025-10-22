@@ -1188,7 +1188,7 @@ function renderPartsTable(pdfDoc, rows, options = {}) {
 
 function drawCenteredTextBlock(page, text, font, rect, options = {}) {
   if (!page || !font || !rect) return;
-  const content = text === undefined || text === null ? '' : String(text).trim();
+  const content = text === undefined || text === null ? '' : String(text);
   const fontSize = options.fontSize || 10;
   const lineHeightMultiplier = options.lineHeightMultiplier || 1.2;
   const paddingX = options.paddingX !== undefined ? options.paddingX : 6;
@@ -1197,18 +1197,18 @@ function drawCenteredTextBlock(page, text, font, rect, options = {}) {
   const verticalAlign = options.verticalAlign || 'middle';
   const color = options.color || rgb(0.12, 0.12, 0.18);
 
-  const layout =
-    options.layout ||
-    layoutTextForWidth({
-      value: content,
-      font,
+  const availableWidth = Math.max(4, rect.width - paddingX * 2);
+  const measurement =
+    options.precomputed ||
+    layoutMultilineText(content, font, availableWidth, {
       fontSize,
       minFontSize: options.minFontSize || fontSize,
       lineHeightMultiplier,
-      maxWidth: Math.max(4, rect.width - paddingX * 2),
     });
 
-  if (!layout || !Array.isArray(layout.lines) || !layout.lines.length) {
+  const entries = measurement.entries || [];
+
+  if (!entries.length) {
     if (options.drawPlaceholder) {
       page.drawText(' ', {
         x: rect.x + paddingX,
@@ -1218,38 +1218,78 @@ function drawCenteredTextBlock(page, text, font, rect, options = {}) {
         color,
       });
     }
-    return layout;
+    return measurement;
   }
 
-  const totalHeight = layout.lineCount * layout.lineHeight;
+  const totalHeight = measurement.totalHeight;
   let textY;
   if (verticalAlign === 'top') {
-    textY = rect.y + rect.height - paddingY - layout.fontSize;
+    textY = rect.y + rect.height - paddingY - entries[0].fontSize;
   } else if (verticalAlign === 'bottom') {
     textY = rect.y + paddingY;
   } else {
-    textY = rect.y + (rect.height - totalHeight) / 2 + layout.lineHeight - layout.fontSize;
+    const firstEntry = entries[0];
+    textY = rect.y + (rect.height - totalHeight) / 2 + firstEntry.lineHeight - firstEntry.fontSize;
   }
 
-  layout.lines.forEach((line) => {
-    const lineWidth = font.widthOfTextAtSize(line, layout.fontSize);
+  entries.forEach((entry) => {
+    const lineWidth = font.widthOfTextAtSize(entry.text, entry.fontSize);
     let textX = rect.x + paddingX;
     if (align === 'center') {
       textX = rect.x + (rect.width - lineWidth) / 2;
     } else if (align === 'right') {
       textX = rect.x + rect.width - paddingX - lineWidth;
     }
-    page.drawText(line, {
+    page.drawText(entry.text, {
       x: textX,
       y: textY,
-      size: layout.fontSize,
+      size: entry.fontSize,
       font,
       color,
     });
-    textY -= layout.lineHeight;
+    textY -= entry.lineHeight;
   });
 
-  return layout;
+  return measurement;
+}
+
+function layoutMultilineText(value, font, maxWidth, options = {}) {
+  const fontSize = options.fontSize || 10;
+  const minFontSize = options.minFontSize || fontSize;
+  const lineHeightMultiplier = options.lineHeightMultiplier || 1.2;
+  const content = value === undefined || value === null ? '' : String(value);
+  const segments = content.split(/\n/);
+  const entries = [];
+  let totalHeight = 0;
+
+  segments.forEach((segment) => {
+    const layout = layoutTextForWidth({
+      value: segment,
+      font,
+      fontSize,
+      minFontSize,
+      lineHeightMultiplier,
+      maxWidth,
+    });
+    if (!layout || !Array.isArray(layout.lines) || !layout.lines.length) {
+      const fallbackHeight = fontSize * lineHeightMultiplier;
+      entries.push({ text: '', fontSize, lineHeight: fallbackHeight });
+      totalHeight += fallbackHeight;
+      return;
+    }
+    layout.lines.forEach((line) => {
+      entries.push({ text: line, fontSize: layout.fontSize, lineHeight: layout.lineHeight });
+      totalHeight += layout.lineHeight;
+    });
+  });
+
+  if (!entries.length) {
+    const fallbackHeight = fontSize * lineHeightMultiplier;
+    entries.push({ text: '', fontSize, lineHeight: fallbackHeight });
+    totalHeight = fallbackHeight;
+  }
+
+  return { entries, totalHeight };
 }
 
 function appendOverflowPages(pdfDoc, font, overflowEntries, options = {}) {
@@ -1556,12 +1596,12 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
 
   const renderEmployeesSection = () => {
     const columnWidths = [
-      tableWidth * 0.06,
+      tableWidth * 0.05,
+      tableWidth * 0.22,
+      tableWidth * 0.17,
+      tableWidth * 0.16,
+      tableWidth * 0.16,
       tableWidth * 0.24,
-      tableWidth * 0.18,
-      tableWidth * 0.16,
-      tableWidth * 0.16,
-      tableWidth * 0.2,
     ];
     const headerHeight = 18;
     const rowBaseHeight = 22;
@@ -1635,26 +1675,23 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
         entry.departureDisplay || entry.departure || '--',
         durationCell,
       ];
-      const layouts = cells.map((value, idx) =>
-        layoutTextForWidth({
-          value,
-          font,
+      const measurements = cells.map((value, idx) =>
+        layoutMultilineText(value, font, Math.max(4, columnWidths[idx] - 8), {
           fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
           minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
           lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
-          maxWidth: columnWidths[idx] - 8,
         }),
       );
       const rowHeight = Math.max(
         rowBaseHeight,
-        ...layouts.map((layout) => Math.ceil(layout.lineCount * layout.lineHeight + 8)),
+        ...measurements.map((measurement) => Math.ceil(measurement.totalHeight + 12)),
       );
       if (ensureSpace(rowHeight + 8)) {
         drawSectionTitle('On-site team (cont.)');
         drawHeaderRow();
       }
       let cellX = margin;
-      layouts.forEach((layout, idx) => {
+      measurements.forEach((measurement, idx) => {
         const cellWidth = columnWidths[idx];
         page.drawRectangle({
           x: cellX,
@@ -1672,17 +1709,17 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
           { x: cellX, y: cursorY - rowHeight, width: cellWidth, height: rowHeight },
           {
             align: 'center',
-            paddingX: 4,
-            paddingY: 6,
-            color: textColor,
-            fontSize: layout.fontSize,
-            minFontSize: layout.fontSize,
-            lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
-            layout,
-          },
-        );
-        cellX += cellWidth;
-      });
+          paddingX: 4,
+          paddingY: 6,
+          color: textColor,
+          fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
+          minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
+          lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+          precomputed: measurement,
+        },
+      );
+      cellX += cellWidth;
+    });
       cursorY -= rowHeight;
     });
 
@@ -2136,15 +2173,23 @@ function generateIndexHtml() {
         ` data-suggest-field="${escapeHtml(descriptor.requestName)}" list="${escapeHtml(listId)}" autocomplete="off"`;
       datalistMarkup = `\n          <datalist id="${escapeHtml(listId)}" data-suggest-list="${escapeHtml(descriptor.requestName)}"></datalist>`;
     }
+    let actualType = type;
+    let resolvedPlaceholder = placeholder || label;
     let extraAttrs = '';
     if (type === 'time') {
-      extraAttrs = ' step="60" lang="en-GB" inputmode="numeric" placeholder="HH:MM"';
+      actualType = 'text';
+      resolvedPlaceholder = 'HH:MM';
+      extraAttrs =
+        ' data-input-kind="time" step="60" lang="en-GB" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour format HH:MM" min="00:00" max="23:59"';
     } else if (type === 'datetime-local') {
-      extraAttrs = ' step="60" lang="en-GB"';
+      actualType = 'text';
+      resolvedPlaceholder = 'YYYY-MM-DD HH:MM';
+      extraAttrs =
+        ' data-datetime-text step="60" lang="en-GB" inputmode="numeric" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-2][0-9]:[0-5][0-9]" title="Use 24-hour format YYYY-MM-DD HH:MM"';
     }
     return `        <label class="field" for="${id}">
           <span>${escapeHtml(label)}</span>
-          <input type="${escapeHtml(type)}" id="${id}" name="${escapeHtml(descriptor.requestName)}"${valueAttr} placeholder="${escapeHtml(placeholder || label)}"${suggestionAttrs}${extraAttrs} />${datalistMarkup}
+          <input type="${escapeHtml(actualType)}" id="${id}" name="${escapeHtml(descriptor.requestName)}"${valueAttr} placeholder="${escapeHtml(resolvedPlaceholder)}"${suggestionAttrs}${extraAttrs} />${datalistMarkup}
         </label>`;
   };
 
@@ -2256,7 +2301,7 @@ ${rows.join('\n')}
 
   const htmlParts = [];
   htmlParts.push(`<!doctype html>
-<html lang="en">
+<html lang="en-GB">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2338,6 +2383,18 @@ ${rows.join('\n')}
       textarea {
         resize: vertical;
         min-height: 120px;
+      }
+      input[type="time"],
+      input[type="datetime-local"] {
+        min-width: 120px;
+      }
+      input[type="time"]::-webkit-datetime-edit-ampm-field,
+      input[type="datetime-local"]::-webkit-datetime-edit-ampm-field {
+        display: none;
+      }
+      input.is-invalid {
+        border-color: #dc2626;
+        background: #fee2e2;
       }
       input[type="checkbox"] {
         width: 26px;
@@ -2894,7 +2951,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
                   <span>Arrival (24h)</span>
                   <div class="datetime-inputs">
                     <input type="date" data-datetime-part="date" />
-                    <input type="time" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" placeholder="HH:MM" />
+                    <input type="text" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour format HH:MM" min="00:00" max="23:59" placeholder="HH:MM" />
                   </div>
                   <input type="hidden" data-field="arrival" />
                 </div>
@@ -2902,7 +2959,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
                   <span>Departure (24h)</span>
                   <div class="datetime-inputs">
                     <input type="date" data-datetime-part="date" />
-                    <input type="time" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" placeholder="HH:MM" />
+                    <input type="text" data-datetime-part="time" step="60" lang="en-GB" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour format HH:MM" min="00:00" max="23:59" placeholder="HH:MM" />
                   </div>
                   <input type="hidden" data-field="departure" />
                 </div>
@@ -2967,6 +3024,120 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
         const selectedFiles = new Map();
         const previewUrls = new Map();
         const debugState = { enabled: false, timeline: [] };
+        const TIME_INPUT_SELECTOR = 'input[data-datetime-part="time"]';
+        const DATETIME_TEXT_SELECTOR = '[data-datetime-text]';
+
+        const clampNumber = (value, min, max) => {
+          if (!Number.isFinite(value)) return min;
+          return Math.min(max, Math.max(min, value));
+        };
+
+        const normalizeTimeInputValue = (raw) => {
+          if (typeof raw !== 'string') return '';
+          const trimmed = raw.trim();
+          if (!trimmed) return '';
+
+          const colonMatch = /^([0-2]?\d):([0-5]?\d)$/.exec(trimmed);
+          let hours;
+          let minutes;
+
+          if (colonMatch) {
+            hours = clampNumber(Number(colonMatch[1]), 0, 23);
+            minutes = clampNumber(Number(colonMatch[2]), 0, 59);
+          } else {
+            const digits = trimmed.replace(/\D/g, '');
+            if (!digits.length) return '';
+            if (digits.length <= 2) {
+              hours = clampNumber(Number(digits), 0, 23);
+              minutes = 0;
+            } else if (digits.length === 3) {
+              hours = clampNumber(Number(digits.slice(0, 1)), 0, 23);
+              minutes = clampNumber(Number(digits.slice(1)), 0, 59);
+            } else {
+              hours = clampNumber(Number(digits.slice(0, digits.length - 2)), 0, 23);
+              minutes = clampNumber(Number(digits.slice(-2)), 0, 59);
+            }
+          }
+
+          return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+        };
+
+        const applyTimeInputBehavior = (input) => {
+          if (!input || input.dataset.timeFormatterApplied === '1') return;
+          input.dataset.timeFormatterApplied = '1';
+          const enforce = () => {
+            const normalized = normalizeTimeInputValue(input.value);
+            if (input.value.trim() && !normalized) {
+              input.classList.add('is-invalid');
+              input.setCustomValidity('Use 24-hour format HH:MM');
+            } else {
+              input.classList.remove('is-invalid');
+              input.setCustomValidity('');
+            }
+            if (normalized) {
+              input.value = normalized;
+            }
+          };
+          input.addEventListener('input', () => {
+            const sanitized = input.value.replace(/[^0-9:]/g, '').slice(0, 5);
+            input.value = sanitized;
+          });
+          input.addEventListener('blur', enforce);
+          enforce();
+        };
+
+        const normalizeDateTimeText = (raw) => {
+          if (typeof raw !== 'string') return { iso: '', display: '' };
+          const trimmed = raw.trim();
+          if (!trimmed) return { iso: '', display: '' };
+          const cleaned = trimmed
+            .replace(/[\/\.]/g, '-')
+            .replace(/t/i, ' ')
+            .replace(/\s+/g, ' ');
+          const match = /^(\d{4})-(\d{1,2})-(\d{1,2})\s+([0-2]?\d):([0-5]?\d)$/.exec(cleaned);
+          if (!match) {
+            return { iso: '', display: cleaned };
+          }
+          const year = clampNumber(Number(match[1]), 1970, 9999);
+          const month = clampNumber(Number(match[2]), 1, 12);
+          const day = clampNumber(Number(match[3]), 1, 31);
+          const hours = clampNumber(Number(match[4]), 0, 23);
+          const minutes = clampNumber(Number(match[5]), 0, 59);
+          const iso =
+            String(year).padStart(4, '0') +
+            '-' +
+            String(month).padStart(2, '0') +
+            '-' +
+            String(day).padStart(2, '0') +
+            'T' +
+            String(hours).padStart(2, '0') +
+            ':' +
+            String(minutes).padStart(2, '0');
+          const display =
+            iso.slice(0, 10) + ' ' + iso.slice(11, 16);
+          return { iso, display };
+        };
+
+        const applyDateTimeTextBehavior = (input) => {
+          if (!input || input.dataset.datetimeFormatterApplied === '1') return;
+          input.dataset.datetimeFormatterApplied = '1';
+          const enforce = () => {
+            const normalized = normalizeDateTimeText(input.value);
+            if (input.value.trim() && !normalized.iso) {
+              input.classList.add('is-invalid');
+              input.setCustomValidity('Use YYYY-MM-DD HH:MM');
+            } else {
+              input.classList.remove('is-invalid');
+              input.setCustomValidity('');
+            }
+            input.value = normalized.display;
+          };
+          input.addEventListener('input', () => {
+            input.value = input.value.replace(/[^\d\s:-]/g, '');
+          });
+          input.addEventListener('blur', enforce);
+          enforce();
+        };
 
         function formatBytes(bytes) {
           if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -3186,6 +3357,12 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             resize(textarea);
             textarea.addEventListener('input', () => resize(textarea));
             textarea.addEventListener('change', () => resize(textarea));
+          });
+        }
+
+        function setupDateTimeTextInputs() {
+          document.querySelectorAll(DATETIME_TEXT_SELECTOR).forEach((input) => {
+            applyDateTimeTextBehavior(input);
           });
         }
 
@@ -3411,10 +3588,13 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             const timeInput = wrapper.querySelector('input[data-datetime-part="time"]');
             const safeIso = iso || '';
             if (hidden) hidden.value = safeIso;
-            if (dateInput || timeInput) {
-              const parts = safeIso.split('T');
-              if (dateInput) dateInput.value = parts[0] || '';
-              if (timeInput) timeInput.value = parts[1] ? parts[1].slice(0, 5) : '';
+            const parts = safeIso.split('T');
+            if (dateInput) {
+              dateInput.value = parts[0] || '';
+            }
+            if (timeInput) {
+              applyTimeInputBehavior(timeInput);
+              timeInput.value = parts[1] ? normalizeTimeInputValue(parts[1].slice(0, 5)) : '';
             }
           }
 
@@ -3432,8 +3612,20 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
             const pair = getDateTimePair(row, field);
             if (!pair) return '';
             const dateValue = pair.dateInput ? pair.dateInput.value.trim() : '';
-            const timeValue = pair.timeInput ? pair.timeInput.value.trim() : '';
-            const iso = dateValue && timeValue ? dateValue + 'T' + timeValue : '';
+            const rawTime = pair.timeInput ? pair.timeInput.value.trim() : '';
+            const normalizedTime = rawTime ? normalizeTimeInputValue(rawTime) : '';
+            if (pair.timeInput) {
+              applyTimeInputBehavior(pair.timeInput);
+              if (rawTime && !normalizedTime) {
+                pair.timeInput.classList.add('is-invalid');
+                pair.timeInput.setCustomValidity('Use 24-hour format HH:MM');
+              } else {
+                pair.timeInput.classList.remove('is-invalid');
+                pair.timeInput.setCustomValidity('');
+                pair.timeInput.value = normalizedTime || rawTime;
+              }
+            }
+            const iso = dateValue && normalizedTime ? dateValue + 'T' + normalizedTime : '';
             if (pair.hiddenInput) {
               pair.hiddenInput.value = iso;
             }
@@ -3852,6 +4044,8 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
               }
             });
           }
+
+          document.querySelectorAll(TIME_INPUT_SELECTOR).forEach((input) => applyTimeInputBehavior(input));
         }
 
         function setupPhotoUploads() {
@@ -4103,6 +4297,7 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
         setupEmployees();
         setupPhotoUploads();
         setupSignaturePads();
+        setupDateTimeTextInputs();
         setupAutoSuggestions();
         updateFilesSummary();
 
@@ -4115,7 +4310,38 @@ ${renderChecklistSection('Sign off checklist', SIGN_OFF_CHECKLIST_ROWS)}
           submitButton.classList.add('is-disabled');
           submitButton.disabled = true;
 
+          const dateTimeSnapshots = Array.from(formEl.querySelectorAll(DATETIME_TEXT_SELECTOR)).map((input) => ({
+            input,
+            normalized: normalizeDateTimeText(input.value),
+          }));
+          const hasInvalidDateTimes = dateTimeSnapshots.some(({ input, normalized }) => {
+            const raw = input.value.trim();
+            if (raw && !normalized.iso) {
+              input.classList.add('is-invalid');
+              input.setCustomValidity('Use YYYY-MM-DD HH:MM');
+              return true;
+            }
+            input.classList.remove('is-invalid');
+            input.setCustomValidity('');
+            return false;
+          });
+          if (hasInvalidDateTimes) {
+            submitButton.classList.remove('is-disabled');
+            submitButton.disabled = false;
+            if (statusEl) {
+              statusEl.textContent = 'Check date/time fields (use YYYY-MM-DD HH:MM).';
+            }
+            return;
+          }
+          dateTimeSnapshots.forEach(({ input, normalized }) => {
+            input.dataset.displayValue = normalized.display;
+            input.value = normalized.iso;
+          });
+
           const formData = new FormData(formEl);
+          dateTimeSnapshots.forEach(({ input, normalized }) => {
+            input.value = normalized.display;
+          });
           if (debugState.enabled) {
             formData.set('debug_mode', 'true');
           } else {
@@ -4278,7 +4504,7 @@ app.use(express.static(PUBLIC_DIR));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 8 * 1024 * 1024,
+    fileSize: 64 * 1024 * 1024,
     files: 64,
   },
   fileFilter: (req, file, cb) => {
