@@ -1064,7 +1064,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           const trimmed = raw.trim();
           if (!trimmed) return '';
 
-          const colonMatch = /^([0-1]?\d|2[0-3]):([0-5]?\d)$/.exec(trimmed);
+          const colonMatch = /^([0-1]?d|2[0-3]):([0-5]?d)$/.exec(trimmed);
           let hours;
           let minutes;
 
@@ -1072,7 +1072,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             hours = clampNumber(Number(colonMatch[1]), 0, 23);
             minutes = clampNumber(Number(colonMatch[2]), 0, 59);
           } else {
-            const digits = trimmed.replace(/\D/g, '');
+            const digits = trimmed.replace(/D/g, '');
             if (!digits.length) return '';
             if (digits.length < 3) {
               return '';
@@ -1105,7 +1105,7 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
             }
           };
           input.addEventListener('input', () => {
-            const digits = input.value.replace(/\\D/g, '').slice(0, 4);
+            const digits = input.value.replace(/\D/g, '').slice(0, 4);
             let formatted = digits;
             if (digits.length > 2) {
               formatted = digits.slice(0, 2) + ':' + digits.slice(2);
@@ -1121,14 +1121,14 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
           const trimmed = raw.trim();
           if (!trimmed) return { iso: '', display: '' };
           let cleaned = trimmed
-            .replace(/[\/.]/g, '-')
+            .replace(/[/.]/g, '-')
             .replace(/[tT]/, ' ')
-            .replace(/\s+/g, ' ')
+            .replace(/s+/g, ' ')
             .trim();
 
-          let match = /(\d{4})-(\d{1,2})-(\d{1,2})\s+([0-2]?\d):([0-5]?\d)$/.exec(cleaned);
+          let match = /(d{4})-(d{1,2})-(d{1,2})s+([0-2]?d):([0-5]?d)$/.exec(cleaned);
           if (!match) {
-            const digitsOnly = cleaned.replace(/\D/g, '');
+            const digitsOnly = cleaned.replace(/D/g, '');
             if (digitsOnly.length === 12) {
               match = [
                 '',
@@ -2516,5 +2516,3 @@ Please schedule follow-up for cabinet C4 fan swap.</textarea>
     </script>
   </body>
 </html>
-
-

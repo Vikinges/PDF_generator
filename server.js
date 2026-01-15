@@ -9,6 +9,7 @@ const express = require('express');
 const multer = require('multer');
 const helmet = require('helmet');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const app = express();
@@ -18,6 +19,7 @@ const FIELDS_PATH = path.join(ROOT_DIR, 'fields.json');
 const MAPPING_PATH = path.join(ROOT_DIR, 'mapping.json');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const OUTPUT_DIR = path.join(ROOT_DIR, 'out');
+const TEMP_DIR = path.join(ROOT_DIR, 'temp');
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const SUGGESTION_STORE_PATH = path.join(DATA_DIR, 'store.json');
 const DEFAULT_TEMPLATE = '/mnt/data/SNDS-LED-Preventative-Maintenance-Checklist BER Blanko.pdf';
@@ -28,6 +30,7 @@ const TEMPLATE_PATH_ENV = process.env.TEMPLATE_PATH;
 
 fsExtra.ensureDirSync(PUBLIC_DIR);
 fsExtra.ensureDirSync(OUTPUT_DIR);
+fsExtra.ensureDirSync(TEMP_DIR);
 fsExtra.ensureDirSync(DATA_DIR);
 
 /**
@@ -1709,17 +1712,17 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
           { x: cellX, y: cursorY - rowHeight, width: cellWidth, height: rowHeight },
           {
             align: 'center',
-          paddingX: 4,
-          paddingY: 6,
-          color: textColor,
-          fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
-          minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
-          lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
-          precomputed: measurement,
-        },
-      );
-      cellX += cellWidth;
-    });
+            paddingX: 4,
+            paddingY: 6,
+            color: textColor,
+            fontSize: DEFAULT_TEXT_FIELD_STYLE.fontSize,
+            minFontSize: DEFAULT_TEXT_FIELD_STYLE.minFontSize,
+            lineHeightMultiplier: DEFAULT_TEXT_FIELD_STYLE.lineHeightMultiplier,
+            precomputed: measurement,
+          },
+        );
+        cellX += cellWidth;
+      });
       cursorY -= rowHeight;
     });
 
@@ -1735,21 +1738,20 @@ async function drawSignOffPage(pdfDoc, font, body, signatureImages, partsRows, o
       employeeEntries.length === 0
         ? 'pending'
         : knownBreakCount > 0
-        ? employeeTotalBreakMinutes
-          ? formatEmployeeDuration(employeeTotalBreakMinutes)
-          : '0m'
-        : employeeBreakStats.UNKNOWN > 0
-        ? 'pending'
-        : '0m';
+          ? employeeTotalBreakMinutes
+            ? formatEmployeeDuration(employeeTotalBreakMinutes)
+            : '0m'
+          : employeeBreakStats.UNKNOWN > 0
+            ? 'pending'
+            : '0m';
     const breakDetails =
       knownBreakCount > 0
         ? formatBreakStatsSummary(employeeBreakStats)
         : employeeBreakStats.UNKNOWN > 0
-        ? `${employeeBreakStats.UNKNOWN} pending`
-        : '';
+          ? `${employeeBreakStats.UNKNOWN} pending`
+          : '';
     page.drawText(
-      `Total recorded time: ${durationSummary} across ${employeeEntries.length} ${
-        employeeEntries.length === 1 ? 'employee' : 'employees'
+      `Total recorded time: ${durationSummary} across ${employeeEntries.length} ${employeeEntries.length === 1 ? 'employee' : 'employees'
       }.`,
       {
         x: margin,
@@ -4518,13 +4520,42 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+  : '*';
+
+app.use(cors({ origin: allowedOrigins }));
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
+const submitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // Limit each IP to 20 submissions per hour
+  message: 'Too many submissions from this IP, please try again after an hour',
+});
+app.use('/submit', submitLimiter);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR));
 
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, TEMP_DIR);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname);
+      cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    },
+  }),
   limits: {
     fileSize: 64 * 1024 * 1024,
     files: 64,
@@ -4595,12 +4626,17 @@ async function embedUploadedImages(pdfDoc, form, photoFiles) {
 
   const embeddings = [];
   for (const file of photoFiles) {
-    if (!file || !file.buffer) continue;
-    const image =
-      file.mimetype && file.mimetype.toLowerCase() === 'image/png'
-        ? await pdfDoc.embedPng(file.buffer)
-        : await pdfDoc.embedJpg(file.buffer);
-    embeddings.push({ file, image });
+    if (!file || !file.path) continue;
+    try {
+      const fileBuffer = await fs.promises.readFile(file.path);
+      const image =
+        file.mimetype && file.mimetype.toLowerCase() === 'image/png'
+          ? await pdfDoc.embedPng(fileBuffer)
+          : await pdfDoc.embedJpg(fileBuffer);
+      embeddings.push({ file, image });
+    } catch (err) {
+      console.warn(`[server] Failed to embed image ${file.originalname}: ${err.message}`);
+    }
   }
 
   if (!embeddings.length) return [];
@@ -4785,8 +4821,8 @@ app.post('/submit', (req, res, next) => {
             typeof rawValue === 'string'
               ? rawValue
               : typeof value === 'string'
-              ? value
-              : null;
+                ? value
+                : null;
           if (/signature/i.test(descriptor.acroName) && signatureData && signatureData.startsWith('data:image/')) {
             signatureImages.push({ acroName: descriptor.acroName, data: signatureData });
             textField.setText('');
@@ -5022,6 +5058,17 @@ app.post('/submit', (req, res, next) => {
   } catch (err) {
     console.error('[server] Failed to process submission', err);
     return res.status(500).json({ ok: false, error: err.message });
+  } finally {
+    // Cleanup temporary files
+    if (photoFiles && photoFiles.length) {
+      for (const file of photoFiles) {
+        if (file.path) {
+          fs.promises
+            .unlink(file.path)
+            .catch((e) => console.warn(`[server] Failed to delete temp file ${file.path}: ${e.message}`));
+        }
+      }
+    }
   }
 });
 
